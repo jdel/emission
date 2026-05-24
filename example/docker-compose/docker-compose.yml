@@ -1,0 +1,69 @@
+# emission behind Traefik with automatic HTTPS.
+#
+# Replace `emission.example.com` with your hostname, set ACME_EMAIL in
+# `.env`, and ensure your DNS A/AAAA record points at the host running this
+# stack. Then `docker compose up -d` and open https://your-host within
+# 15 minutes of first boot to register the admin passkey.
+
+services:
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      # Discovery via the Docker socket — services opt in via labels.
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      # HTTP entrypoint, redirects everything to HTTPS.
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # HTTPS entrypoint with Let's Encrypt TLS.
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      # Logs.
+      - --log.level=INFO
+      - --accesslog=false
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - web
+
+  emission:
+    image: ghcr.io/jdel/emission:latest
+    container_name: emission
+    restart: unless-stopped
+    environment:
+      EMISSION_AUTH_ENABLED: "true"
+      EMISSION_HTTP_UI: "true"
+      EMISSION_HTTP_PUBLIC_URL: "https://${EMISSION_HOST}"
+      EMISSION_CLIENT_NAME: "${EMISSION_CLIENT:-transmission-4.0.6}"
+      EMISSION_CLIENT_MIN_SPEED: "${EMISSION_MIN_SPEED:-50K}"
+      EMISSION_CLIENT_MAX_SPEED: "${EMISSION_MAX_SPEED:-500K}"
+      EMISSION_CLIENT_MAX_RATIO: "${EMISSION_MAX_RATIO:-0}"
+    volumes:
+      - torrents:/data/torrents
+      - auth:/data/auth
+    command: ["serve"]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.emission.rule=Host(`${EMISSION_HOST}`)
+      - traefik.http.routers.emission.entrypoints=websecure
+      - traefik.http.routers.emission.tls.certresolver=le
+      - traefik.http.services.emission.loadbalancer.server.port=8080
+    networks:
+      - web
+
+networks:
+  web:
+
+volumes:
+  letsencrypt:
+  torrents:
+  auth:

@@ -1,0 +1,761 @@
+basePath: /
+definitions:
+  cmd.authResult:
+    properties:
+      authenticated:
+        type: boolean
+    type: object
+  cmd.authStatusResponse:
+    properties:
+      authEnabled:
+        type: boolean
+      authenticated:
+        type: boolean
+      bootstrapAvailable:
+        type: boolean
+      deviceCount:
+        type: integer
+      username:
+        type: string
+    type: object
+  cmd.deviceInfo:
+    properties:
+      addedAt:
+        type: integer
+      id:
+        description: base64url credential id
+        type: string
+      username:
+        type: string
+    type: object
+  cmd.errorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  cmd.inviteBody:
+    properties:
+      invite:
+        type: string
+    type: object
+  cmd.inviteRequest:
+    properties:
+      username:
+        type: string
+    type: object
+  cmd.inviteResponse:
+    properties:
+      code:
+        type: string
+      url:
+        type: string
+    type: object
+  cmd.loginChallenge:
+    properties:
+      ceremonyId:
+        type: string
+      options:
+        $ref: '#/definitions/protocol.CredentialAssertion'
+    type: object
+  cmd.pagedTorrents:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/seeder.Status'
+        type: array
+      total:
+        type: integer
+    type: object
+  cmd.registerChallenge:
+    properties:
+      ceremonyId:
+        type: string
+      options:
+        $ref: '#/definitions/protocol.CredentialCreation'
+      username:
+        type: string
+    type: object
+  cmd.speedUpdate:
+    properties:
+      maxRatio:
+        type: number
+      maxSpeed:
+        type: string
+      minSpeed:
+        type: string
+    type: object
+  cmd.uploadResult:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  protocol.AttestationFormat:
+    enum:
+    - packed
+    - tpm
+    - android-key
+    - android-safetynet
+    - fido-u2f
+    - apple
+    - compound
+    - none
+    type: string
+    x-enum-varnames:
+    - AttestationFormatPacked
+    - AttestationFormatTPM
+    - AttestationFormatAndroidKey
+    - AttestationFormatAndroidSafetyNet
+    - AttestationFormatFIDOUniversalSecondFactor
+    - AttestationFormatApple
+    - AttestationFormatCompound
+    - AttestationFormatNone
+  protocol.AuthenticationExtensions:
+    additionalProperties: {}
+    type: object
+  protocol.AuthenticatorAttachment:
+    enum:
+    - platform
+    - cross-platform
+    type: string
+    x-enum-varnames:
+    - Platform
+    - CrossPlatform
+  protocol.AuthenticatorSelection:
+    properties:
+      authenticatorAttachment:
+        allOf:
+        - $ref: '#/definitions/protocol.AuthenticatorAttachment'
+        description: |-
+          AuthenticatorAttachment If this member is present, eligible authenticators are filtered to only
+          authenticators attached with the specified AuthenticatorAttachment enum.
+      requireResidentKey:
+        description: |-
+          RequireResidentKey this member describes the Relying Party's requirements regarding resident
+          credentials. If the parameter is set to true, the authenticator MUST create a client-side-resident
+          public key credential source when creating a public key credential.
+        type: boolean
+      residentKey:
+        allOf:
+        - $ref: '#/definitions/protocol.ResidentKeyRequirement'
+        description: |-
+          ResidentKey this member describes the Relying Party's requirements regarding resident
+          credentials per Webauthn Level 2.
+      userVerification:
+        allOf:
+        - $ref: '#/definitions/protocol.UserVerificationRequirement'
+        description: |-
+          UserVerification This member describes the Relying Party's requirements regarding user verification for
+          the create() operation. Eligible authenticators are filtered to only those capable of satisfying this
+          requirement.
+    type: object
+  protocol.AuthenticatorTransport:
+    enum:
+    - usb
+    - nfc
+    - ble
+    - smart-card
+    - hybrid
+    - internal
+    type: string
+    x-enum-varnames:
+    - USB
+    - NFC
+    - BLE
+    - SmartCard
+    - Hybrid
+    - Internal
+  protocol.ConveyancePreference:
+    enum:
+    - none
+    - indirect
+    - direct
+    - enterprise
+    type: string
+    x-enum-varnames:
+    - PreferNoAttestation
+    - PreferIndirectAttestation
+    - PreferDirectAttestation
+    - PreferEnterpriseAttestation
+  protocol.CredentialAssertion:
+    properties:
+      mediation:
+        $ref: '#/definitions/protocol.CredentialMediationRequirement'
+      publicKey:
+        $ref: '#/definitions/protocol.PublicKeyCredentialRequestOptions'
+    type: object
+  protocol.CredentialCreation:
+    properties:
+      mediation:
+        $ref: '#/definitions/protocol.CredentialMediationRequirement'
+      publicKey:
+        $ref: '#/definitions/protocol.PublicKeyCredentialCreationOptions'
+    type: object
+  protocol.CredentialDescriptor:
+    properties:
+      id:
+        description: CredentialID The ID of a credential to allow/disallow.
+        items:
+          type: integer
+        type: array
+      transports:
+        description: The authenticator transports that can be used.
+        items:
+          $ref: '#/definitions/protocol.AuthenticatorTransport'
+        type: array
+      type:
+        allOf:
+        - $ref: '#/definitions/protocol.CredentialType'
+        description: The valid credential types.
+    type: object
+  protocol.CredentialMediationRequirement:
+    enum:
+    - ""
+    - silent
+    - optional
+    - conditional
+    - required
+    type: string
+    x-enum-varnames:
+    - MediationDefault
+    - MediationSilent
+    - MediationOptional
+    - MediationConditional
+    - MediationRequired
+  protocol.CredentialParameter:
+    properties:
+      alg:
+        $ref: '#/definitions/webauthncose.COSEAlgorithmIdentifier'
+      type:
+        $ref: '#/definitions/protocol.CredentialType'
+    type: object
+  protocol.CredentialType:
+    enum:
+    - public-key
+    type: string
+    x-enum-varnames:
+    - PublicKeyCredentialType
+  protocol.PublicKeyCredentialCreationOptions:
+    properties:
+      attestation:
+        $ref: '#/definitions/protocol.ConveyancePreference'
+      attestationFormats:
+        items:
+          $ref: '#/definitions/protocol.AttestationFormat'
+        type: array
+      authenticatorSelection:
+        $ref: '#/definitions/protocol.AuthenticatorSelection'
+      challenge:
+        items:
+          type: integer
+        type: array
+      excludeCredentials:
+        items:
+          $ref: '#/definitions/protocol.CredentialDescriptor'
+        type: array
+      extensions:
+        $ref: '#/definitions/protocol.AuthenticationExtensions'
+      hints:
+        items:
+          $ref: '#/definitions/protocol.PublicKeyCredentialHints'
+        type: array
+      pubKeyCredParams:
+        items:
+          $ref: '#/definitions/protocol.CredentialParameter'
+        type: array
+      rp:
+        $ref: '#/definitions/protocol.RelyingPartyEntity'
+      timeout:
+        type: integer
+      user:
+        $ref: '#/definitions/protocol.UserEntity'
+    type: object
+  protocol.PublicKeyCredentialHints:
+    enum:
+    - security-key
+    - client-device
+    - hybrid
+    type: string
+    x-enum-varnames:
+    - PublicKeyCredentialHintSecurityKey
+    - PublicKeyCredentialHintClientDevice
+    - PublicKeyCredentialHintHybrid
+  protocol.PublicKeyCredentialRequestOptions:
+    properties:
+      allowCredentials:
+        items:
+          $ref: '#/definitions/protocol.CredentialDescriptor'
+        type: array
+      challenge:
+        items:
+          type: integer
+        type: array
+      extensions:
+        $ref: '#/definitions/protocol.AuthenticationExtensions'
+      hints:
+        items:
+          $ref: '#/definitions/protocol.PublicKeyCredentialHints'
+        type: array
+      rpId:
+        type: string
+      timeout:
+        type: integer
+      userVerification:
+        $ref: '#/definitions/protocol.UserVerificationRequirement'
+    type: object
+  protocol.RelyingPartyEntity:
+    properties:
+      id:
+        description: A unique identifier for the Relying Party entity, which sets
+          the RP ID.
+        type: string
+      name:
+        description: |-
+          A human-palatable name for the entity. Its function depends on what the PublicKeyCredentialEntity represents:
+
+          When inherited by PublicKeyCredentialRpEntity it is a human-palatable identifier for the Relying Party,
+          intended only for display. For example, "ACME Corporation", "Wonderful Widgets, Inc." or "ОАО Примертех".
+
+          When inherited by PublicKeyCredentialUserEntity, it is a human-palatable identifier for a user account. It is
+          intended only for display, i.e., aiding the user in determining the difference between user accounts with similar
+          displayNames. For example, "alexm", "alex.p.mueller@example.com" or "+14255551234".
+        type: string
+    type: object
+  protocol.ResidentKeyRequirement:
+    enum:
+    - discouraged
+    - preferred
+    - required
+    type: string
+    x-enum-varnames:
+    - ResidentKeyRequirementDiscouraged
+    - ResidentKeyRequirementPreferred
+    - ResidentKeyRequirementRequired
+  protocol.UserEntity:
+    properties:
+      displayName:
+        description: |-
+          A human-palatable name for the user account, intended only for display.
+          For example, "Alex P. Müller" or "田中 倫". The Relying Party SHOULD let
+          the user choose this, and SHOULD NOT restrict the choice more than necessary.
+        type: string
+      id:
+        description: |-
+          ID is the user handle of the user account entity. To ensure secure operation,
+          authentication and authorization decisions MUST be made on the basis of this id
+          member, not the displayName nor name members. See Section 6.1 of
+          [RFC8266](https://www.w3.org/TR/webauthn/#biblio-rfc8266).
+      name:
+        description: |-
+          A human-palatable name for the entity. Its function depends on what the PublicKeyCredentialEntity represents:
+
+          When inherited by PublicKeyCredentialRpEntity it is a human-palatable identifier for the Relying Party,
+          intended only for display. For example, "ACME Corporation", "Wonderful Widgets, Inc." or "ОАО Примертех".
+
+          When inherited by PublicKeyCredentialUserEntity, it is a human-palatable identifier for a user account. It is
+          intended only for display, i.e., aiding the user in determining the difference between user accounts with similar
+          displayNames. For example, "alexm", "alex.p.mueller@example.com" or "+14255551234".
+        type: string
+    type: object
+  protocol.UserVerificationRequirement:
+    enum:
+    - required
+    - preferred
+    - discouraged
+    type: string
+    x-enum-comments:
+      VerificationPreferred: This is the default.
+    x-enum-descriptions:
+    - ""
+    - This is the default.
+    - ""
+    x-enum-varnames:
+    - VerificationRequired
+    - VerificationPreferred
+    - VerificationDiscouraged
+  seeder.Status:
+    properties:
+      addedAt:
+        description: unix milliseconds
+        type: integer
+      id:
+        description: info hash, hex
+        type: string
+      location:
+        description: .torrent path, relative to the watched root
+        type: string
+      maxRateBytesPerSec:
+        description: configured ceiling
+        type: integer
+      maxRatio:
+        description: upload cap as a multiple of torrent size (0 = unlimited)
+        type: number
+      minRateBytesPerSec:
+        description: configured floor
+        type: integer
+      name:
+        description: torrent display name
+        type: string
+      rateBytesPerSec:
+        type: integer
+      sizeBytes:
+        type: integer
+      trackers:
+        items:
+          $ref: '#/definitions/seeder.TrackerStatus'
+        type: array
+      uploadedBytes:
+        type: integer
+    type: object
+  seeder.TrackerStatus:
+    properties:
+      intervalSec:
+        type: integer
+      leechers:
+        type: integer
+      minIntervalSec:
+        type: integer
+      nextAnnounceAt:
+        description: unix ms, 0 if unknown
+        type: integer
+      seeders:
+        type: integer
+      status:
+        description: '"ok" | "failing" | "pending"'
+        type: string
+      url:
+        type: string
+    type: object
+  webauthncose.COSEAlgorithmIdentifier:
+    enum:
+    - -7
+    - -8
+    - -9
+    - -19
+    - -35
+    - -36
+    - -37
+    - -38
+    - -39
+    - -47
+    - -48
+    - -49
+    - -50
+    - -51
+    - -52
+    - -257
+    - -258
+    - -259
+    - -65535
+    type: integer
+    x-enum-varnames:
+    - AlgES256
+    - AlgEdDSA
+    - AlgESP256
+    - AlgEd25519
+    - AlgES384
+    - AlgES512
+    - AlgPS256
+    - AlgPS384
+    - AlgPS512
+    - AlgES256K
+    - AlgMLDSA44
+    - AlgMLDSA65
+    - AlgMLDSA87
+    - AlgESP384
+    - AlgESP512
+    - AlgRS256
+    - AlgRS384
+    - AlgRS512
+    - AlgRS1
+info:
+  contact: {}
+  description: Spoof BitTorrent tracker announces to boost your ratio.
+  title: emission API
+  version: "1.0"
+paths:
+  /api/auth/credentials/{id}:
+    delete:
+      parameters:
+      - description: Base64url credential ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+      summary: Remove a passkey (admin only)
+      tags:
+      - admin
+  /api/auth/invite:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Username for the invite
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/cmd.inviteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.inviteResponse'
+      summary: Create an invite link (admin only)
+      tags:
+      - auth
+  /api/auth/login/begin:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.loginChallenge'
+      summary: Begin passkey login
+      tags:
+      - auth
+  /api/auth/login/finish:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Ceremony ID from /begin
+        in: query
+        name: ceremony
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.authResult'
+      summary: Finish passkey login
+      tags:
+      - auth
+  /api/auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+      summary: Log out
+      tags:
+      - auth
+  /api/auth/register/begin:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Invite token (empty string for bootstrap)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/cmd.inviteBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.registerChallenge'
+      summary: Begin passkey registration
+      tags:
+      - auth
+  /api/auth/register/finish:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Ceremony ID from /begin
+        in: query
+        name: ceremony
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.authResult'
+      summary: Finish passkey registration
+      tags:
+      - auth
+  /api/auth/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.authStatusResponse'
+      summary: Authentication status
+      tags:
+      - auth
+  /api/auth/users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/cmd.deviceInfo'
+            type: array
+      summary: List registered devices (admin only)
+      tags:
+      - admin
+  /api/auth/users/{username}:
+    delete:
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+      summary: Remove a user and their torrents (admin only)
+      tags:
+      - admin
+  /api/torrents:
+    get:
+      parameters:
+      - description: Page size (0 = all, default 10)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset
+        in: query
+        name: offset
+        type: integer
+      - description: Case-insensitive name filter
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.pagedTorrents'
+      summary: List torrents
+      tags:
+      - torrents
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Torrent file (.torrent)
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Minimum upload rate (e.g. 200K)
+        in: formData
+        name: min-speed
+        type: string
+      - description: Maximum upload rate (e.g. 1M)
+        in: formData
+        name: max-speed
+        type: string
+      - description: Stop uploading at N × torrent size (0 = unlimited)
+        in: formData
+        name: max-ratio
+        type: number
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/cmd.uploadResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+      summary: Upload a .torrent file
+      tags:
+      - torrents
+  /api/torrents/{id}:
+    delete:
+      parameters:
+      - description: Torrent info hash (40-char hex)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+      summary: Remove a torrent
+      tags:
+      - torrents
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Torrent info hash (40-char hex)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Speed settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/cmd.speedUpdate'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+      summary: Update torrent upload speed
+      tags:
+      - torrents
+  /api/ws:
+    get:
+      description: Upgrades to WebSocket. Pushes {type:"stats",torrents:[...]} ~1/s
+        and {type:"changed"} on list changes.
+      responses: {}
+      summary: WebSocket live stats feed
+      tags:
+      - realtime
+swagger: "2.0"

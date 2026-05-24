@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Go module dependencies (go.mod / go.sum)
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      go-deps:
+        patterns:
+          - "*"
+
+  # npm dependencies for the React UI
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      ui-deps:
+        patterns:
+          - "*"
+
+  # GitHub Actions in .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
