@@ -1,0 +1,13 @@
+.git
+.gitignore
+dist
+ratio
+*.md
+Dockerfile
+.dockerignore
+.github
+
+# UI: node_modules is reinstalled in the ui stage; dist is rebuilt there.
+ui/node_modules
+ui/dist
+internal/web/dist
