@@ -81,12 +81,10 @@ func startHTTP(cancel context.CancelFunc, mgr *seeder.Manager, opts httpOptions)
 		secure:           opts.tlsCert != "" || (opts.auth != nil && strings.HasPrefix(opts.publicURL, "https://")),
 		wsOriginPatterns: wsOrigins(opts.publicURL, opts.auth != nil),
 	}
-	pt := newProxyTrust(opts.trustedProxies)
-	perIP := newRateLimiter(1, 10)   // ~1 req/s sustained, burst 10, per client
-	global := newRateLimiter(20, 100) // backstop: ≤20/s overall on auth routes
+	rl := newRpsLimiter(newProxyTrust(opts.trustedProxies))
 	httpSrv := &http.Server{
 		Addr:              opts.addr,
-		Handler:           logRequests(recoverPanic(limitAuth(pt, perIP, global, srv.requireAuth(newMux(srv, opts.withUI))))),
+		Handler:           logRequests(recoverPanic(srv.requireAuth(newMux(srv, opts.withUI, rl)))),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	scheme := "http"
@@ -129,7 +127,7 @@ func startHTTP(cancel context.CancelFunc, mgr *seeder.Manager, opts httpOptions)
 
 // newMux wires the API routes and, when withUI is set and the UI was built
 // into the binary, the embedded web interface at the root.
-func newMux(srv *server, withUI bool) *http.ServeMux {
+func newMux(srv *server, withUI bool, rl *rpsLimiter) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/torrents", srv.listTorrents)
 	mux.HandleFunc("POST /api/torrents", srv.uploadTorrent)
@@ -142,11 +140,11 @@ func newMux(srv *server, withUI bool) *http.ServeMux {
 	// The rest of the auth routes only exist when authentication is enabled.
 	mux.HandleFunc("GET /api/auth/status", srv.authStatus)
 	if srv.auth != nil {
-		mux.HandleFunc("POST /api/auth/register/begin", srv.authRegisterBegin)
-		mux.HandleFunc("POST /api/auth/register/finish", srv.authRegisterFinish)
-		mux.HandleFunc("POST /api/auth/login/begin", srv.authLoginBegin)
-		mux.HandleFunc("POST /api/auth/login/finish", srv.authLoginFinish)
-		mux.HandleFunc("POST /api/auth/invite", srv.authInvite)
+		mux.Handle("POST /api/auth/register/begin", rl.wrap(http.HandlerFunc(srv.authRegisterBegin)))
+		mux.Handle("POST /api/auth/register/finish", rl.wrap(http.HandlerFunc(srv.authRegisterFinish)))
+		mux.Handle("POST /api/auth/login/begin", rl.wrap(http.HandlerFunc(srv.authLoginBegin)))
+		mux.Handle("POST /api/auth/login/finish", rl.wrap(http.HandlerFunc(srv.authLoginFinish)))
+		mux.Handle("POST /api/auth/invite", rl.wrap(http.HandlerFunc(srv.authInvite)))
 		mux.HandleFunc("POST /api/auth/logout", srv.authLogout)
 		// Self-service device management (any authenticated user).
 		mux.HandleFunc("GET /api/auth/me", srv.authMe)

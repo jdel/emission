@@ -67,15 +67,19 @@ func TestProxyTrustSpoofedXFF(t *testing.T) {
 	}
 }
 
-func TestLimitAuthThrottles(t *testing.T) {
-	pt := newProxyTrust(nil)
-	perIP := newRateLimiter(1, 2)
-	global := newRateLimiter(100, 100)
+func newTestRpsLimiter(rate, burst float64) *rpsLimiter {
+	l := newRpsLimiter(newProxyTrust(nil))
+	l.perIP = newRateLimiter(rate, burst)
+	l.global = newRateLimiter(100, 100)
+	return l
+}
 
+func TestLimitAuthThrottles(t *testing.T) {
+	rl := newTestRpsLimiter(1, 2)
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := limitAuth(pt, perIP, global, inner)
+	h := rl.wrap(inner)
 
 	pass, blocked := 0, 0
 	for i := 0; i < 10; i++ {
@@ -97,22 +101,18 @@ func TestLimitAuthThrottles(t *testing.T) {
 	}
 }
 
-func TestLimitAuthSkipsNonPublicPaths(t *testing.T) {
-	pt := newProxyTrust(nil)
-	perIP := newRateLimiter(0, 0) // deny everything
-	global := newRateLimiter(0, 0)
-
+func TestLimitRpsBlocksOnExhaustedBucket(t *testing.T) {
+	rl := newTestRpsLimiter(0, 0) // deny everything immediately
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := limitAuth(pt, perIP, global, inner)
+	h := rl.wrap(inner)
 
-	// /api/torrents is not in publicAPIPaths — limiter must not apply
-	r := httptest.NewRequest(http.MethodGet, "/api/torrents", nil)
+	r := httptest.NewRequest(http.MethodPost, "/api/auth/invite", nil)
 	r.RemoteAddr = "1.2.3.4:1234"
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	if w.Code != http.StatusOK {
-		t.Errorf("non-public path should not be rate-limited, got %d", w.Code)
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("expected 429, got %d", w.Code)
 	}
 }

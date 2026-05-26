@@ -33,18 +33,18 @@ func (rl *rateLimiter) allow(key string) bool {
 	defer rl.mu.Unlock()
 	now := time.Now()
 	if t, ok := rl.last[key]; ok {
-		rl.buckets[key] += now.Sub(t).Seconds() * rl.rate
+		rl.buckets[key] += now.Sub(t).Seconds() * rl.rate // refill tokens earned since last call
 		if rl.buckets[key] > rl.burst {
-			rl.buckets[key] = rl.burst
+			rl.buckets[key] = rl.burst // cap at burst ceiling
 		}
 	} else {
-		rl.buckets[key] = rl.burst
+		rl.buckets[key] = rl.burst // first seen: start full
 	}
 	rl.last[key] = now
 	if rl.buckets[key] < 1 {
-		return false
+		return false // bucket empty: deny
 	}
-	rl.buckets[key]--
+	rl.buckets[key]-- // consume one token
 	return true
 }
 
@@ -103,17 +103,28 @@ func (pt *proxyTrust) clientIP(r *http.Request) string {
 	return peerStr
 }
 
-// limitAuth throttles requests to the unauthenticated auth routes. It applies
-// both a per-client bucket and a global backstop. The global bucket bounds
-// total unauthenticated auth attempts regardless of source, closing the
-// IPv6-rotation gap where an attacker with a /64 can cycle per-IP buckets.
-func limitAuth(pt *proxyTrust, perIP, global *rateLimiter, next http.Handler) http.Handler {
+// rpsLimiter wraps handlers with shared per-client and global token buckets.
+// Construct once and apply to each route via wrap — all wrapped routes share
+// the same buckets so the limits are enforced across routes, not per-route.
+type rpsLimiter struct {
+	pt     *proxyTrust
+	perIP  *rateLimiter
+	global *rateLimiter
+}
+
+func newRpsLimiter(pt *proxyTrust) *rpsLimiter {
+	return &rpsLimiter{
+		pt:     pt,
+		perIP:  newRateLimiter(1, 10),   // ~1 req/s sustained, burst 10, per client
+		global: newRateLimiter(20, 100), // backstop: ≤20/s across all limited routes
+	}
+}
+
+func (l *rpsLimiter) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if publicAPIPaths[r.URL.Path] {
-			if !perIP.allow(pt.clientIP(r)) || !global.allow("auth") {
-				writeError(w, http.StatusTooManyRequests, "too many requests")
-				return
-			}
+		if !l.perIP.allow(l.pt.clientIP(r)) || !l.global.allow("rps") {
+			writeError(w, http.StatusTooManyRequests, "too many requests")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
