@@ -149,6 +149,8 @@ Let Traefik / Caddy / nginx handle the certificate. The Docker example
 in [`example/docker-compose/`](example/docker-compose/) does this with
 Traefik and Let's Encrypt.
 
+> **Warning:** when running behind a reverse proxy, set `--http.trusted-proxies` (or `EMISSION_HTTP_TRUSTED_PROXIES`) to the proxy's subnet. Without it, the rate limiter sees the proxy's IP for every request — all clients share one bucket, the burst exhausts immediately, and legitimate users get 429s. The bundled Docker Compose example sets this automatically.
+
 ### Direct TLS
 
 If you have a certificate already (e.g. from `certbot`):
