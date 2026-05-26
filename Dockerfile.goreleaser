@@ -1,0 +1,15 @@
+# GoReleaser runtime image — the binary is injected by GoReleaser into the
+# build context; the UI is already embedded in it via go:embed.
+FROM alpine:3.21 AS certs
+RUN apk add --no-cache ca-certificates
+
+FROM scratch
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY emission /emission
+
+ENV EMISSION_STORAGE_TORRENTS=/data/torrents \
+    EMISSION_STORAGE_AUTH=/data/auth/auth.json
+
+USER 65534
+ENTRYPOINT ["/emission"]
+CMD ["serve"]
