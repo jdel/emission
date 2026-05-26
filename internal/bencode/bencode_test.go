@@ -123,6 +123,15 @@ func TestDecodeIntEdgeCases(t *testing.T) {
 	}
 }
 
+func TestDecodeDepthLimit(t *testing.T) {
+	// 1 million nested list openers — must return an error, not crash.
+	payload := bytes.Repeat([]byte("l"), 1_000_000)
+	_, err := Decode(payload)
+	if err == nil {
+		t.Fatal("expected error for deeply nested input, got nil")
+	}
+}
+
 func TestDecodeEmptyContainers(t *testing.T) {
 	v, err := Decode([]byte("le"))
 	if err != nil || v.Kind != KindList || len(v.List) != 0 {

@@ -49,14 +49,20 @@ func Decode(data []byte) (Value, error) {
 	return v, nil
 }
 
+const maxDepth = 100
+
 type decoder struct {
-	data []byte
-	pos  int
+	data  []byte
+	pos   int
+	depth int
 }
 
 func (d *decoder) decode() (Value, error) {
 	if d.pos >= len(d.data) {
 		return Value{}, errors.New("bencode: unexpected eof")
+	}
+	if d.depth > maxDepth {
+		return Value{}, errors.New("bencode: nesting too deep")
 	}
 	start := d.pos
 	switch c := d.data[d.pos]; {
@@ -106,6 +112,8 @@ func (d *decoder) decodeBytes(start int) (Value, error) {
 }
 
 func (d *decoder) decodeList(start int) (Value, error) {
+	d.depth++
+	defer func() { d.depth-- }()
 	d.pos++ // skip 'l'
 	var items []Value
 	for d.pos < len(d.data) && d.data[d.pos] != 'e' {
@@ -123,6 +131,8 @@ func (d *decoder) decodeList(start int) (Value, error) {
 }
 
 func (d *decoder) decodeDict(start int) (Value, error) {
+	d.depth++
+	defer func() { d.depth-- }()
 	d.pos++ // skip 'd'
 	m := make(map[string]Value)
 	for d.pos < len(d.data) && d.data[d.pos] != 'e' {
