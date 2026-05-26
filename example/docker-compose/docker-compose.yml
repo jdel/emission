@@ -43,6 +43,8 @@ services:
       EMISSION_HTTP_AUTH: "true"
       EMISSION_HTTP_UI: "true"
       EMISSION_HTTP_PUBLIC_URL: "https://${EMISSION_HOST}"
+      # Trust X-Forwarded-For only from Traefik (the fixed subnet below).
+      EMISSION_HTTP_TRUSTED_PROXIES: "172.28.0.0/16"
       EMISSION_CLIENT_NAME: "${EMISSION_CLIENT:-transmission-4.0.6}"
       EMISSION_CLIENT_MIN_SPEED: "${EMISSION_MIN_SPEED:-50K}"
       EMISSION_CLIENT_MAX_SPEED: "${EMISSION_MAX_SPEED:-500K}"
@@ -61,6 +63,9 @@ services:
 
 networks:
   web:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
 
 volumes:
   letsencrypt:
