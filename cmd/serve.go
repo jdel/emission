@@ -47,10 +47,12 @@ accepted.`,
 	cmd.Flags().String("http.tls.cert", "", "TLS certificate file, PEM (required when TLS enabled)")
 	cmd.Flags().String("http.tls.key", "", "TLS private key file, PEM (required when TLS enabled)")
 	cmd.Flags().String("http.public-url", "", "externally reachable base URL, e.g. https://host:8443 (required when auth enabled)")
+	cmd.Flags().StringSlice("http.trusted-proxies", nil, "CIDRs whose X-Forwarded-For is trusted for rate limiting (e.g. 172.16.0.0/12)")
 	for _, name := range []string{
 		"storage.auth", "http.auth",
 		"http.api", "http.ui", "http.port",
 		"http.tls.enabled", "http.tls.cert", "http.tls.key", "http.public-url",
+		"http.trusted-proxies",
 	} {
 		_ = viper.BindPFlag(name, cmd.Flags().Lookup(name))
 	}
@@ -112,13 +114,14 @@ func runServe(_ *cobra.Command, _ []string) error {
 	var shutdownHTTP func()
 	if apiEnabled {
 		opts := httpOptions{
-			addr:        fmt.Sprintf(":%d", viper.GetInt("http.port")),
-			torrentsDir: torrentsDir,
-			withUI:      uiEnabled,
-			defMin:      minSpeed,
-			defMax:      maxSpeed,
-			auth:        authSvc,
-			publicURL:   viper.GetString("http.public-url"),
+			addr:           fmt.Sprintf(":%d", viper.GetInt("http.port")),
+			torrentsDir:    torrentsDir,
+			withUI:         uiEnabled,
+			defMin:         minSpeed,
+			defMax:         maxSpeed,
+			auth:           authSvc,
+			publicURL:      viper.GetString("http.public-url"),
+			trustedProxies: viper.GetStringSlice("http.trusted-proxies"),
 		}
 		if viper.GetBool("http.tls.enabled") {
 			cert := viper.GetString("http.tls.cert")

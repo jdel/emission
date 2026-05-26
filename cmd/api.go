@@ -55,15 +55,16 @@ type server struct {
 // httpOptions configures the API/UI HTTP server. When tlsCert and tlsKey are
 // both set, the server runs over HTTPS.
 type httpOptions struct {
-	addr        string
-	torrentsDir string
-	withUI      bool
-	defMin      uint64
-	defMax      uint64
-	tlsCert     string // empty = plain HTTP
-	tlsKey      string
-	auth        *auth.Service // nil = authentication disabled
-	publicURL   string
+	addr           string
+	torrentsDir    string
+	withUI         bool
+	defMin         uint64
+	defMax         uint64
+	tlsCert        string // empty = plain HTTP
+	tlsKey         string
+	auth           *auth.Service // nil = authentication disabled
+	publicURL      string
+	trustedProxies []string // CIDRs whose X-Forwarded-For is trusted for rate limiting
 }
 
 // startHTTP starts the API (and optionally UI) HTTP server in a background
@@ -80,9 +81,12 @@ func startHTTP(cancel context.CancelFunc, mgr *seeder.Manager, opts httpOptions)
 		secure:           opts.tlsCert != "" || strings.HasPrefix(opts.publicURL, "https://"),
 		wsOriginPatterns: wsOrigins(opts.publicURL),
 	}
+	pt := newProxyTrust(opts.trustedProxies)
+	perIP := newRateLimiter(1, 10)   // ~1 req/s sustained, burst 10, per client
+	global := newRateLimiter(20, 100) // backstop: ≤20/s overall on auth routes
 	httpSrv := &http.Server{
 		Addr:              opts.addr,
-		Handler:           logRequests(recoverPanic(srv.requireAuth(newMux(srv, opts.withUI)))),
+		Handler:           logRequests(recoverPanic(limitAuth(pt, perIP, global, srv.requireAuth(newMux(srv, opts.withUI))))),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	scheme := "http"

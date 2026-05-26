@@ -201,6 +201,7 @@ emission serve \
 | `--http.tls.cert`    | `EMISSION_HTTP_TLS_CERT`    | TLS certificate PEM (required with `--http.tls.enabled`) |
 | `--http.tls.key`     | `EMISSION_HTTP_TLS_KEY`     | TLS private key PEM (required with `--http.tls.enabled`) |
 | `--http.public-url`  | `EMISSION_HTTP_PUBLIC_URL`  | Externally reachable base URL (required with `--http.auth`) |
+| `--http.trusted-proxies` | `EMISSION_HTTP_TRUSTED_PROXIES` | Comma-separated CIDRs whose `X-Forwarded-For` is trusted for rate limiting (e.g. `172.16.0.0/12`). Set to the reverse proxy's subnet when emission is behind a proxy — leaving this empty causes all clients to share the proxy's IP bucket. Only set when **all** traffic genuinely transits the proxy. |
 
 ---
 
