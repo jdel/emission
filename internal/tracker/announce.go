@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jdel/emission/internal/bencode"
@@ -38,10 +40,34 @@ type Params struct {
 	HTTPClient *http.Client
 }
 
+func isDisallowedIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified()
+}
+
+var safeDialer = &net.Dialer{
+	Timeout: 10 * time.Second,
+	Control: func(network, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return err
+		}
+		ip := net.ParseIP(host) // address is already resolved here
+		if ip == nil || isDisallowedIP(ip) {
+			return fmt.Errorf("blocked address: %s", address)
+		}
+		return nil
+	},
+}
+
 // defaultClient is the fallback used by Announce when Params.HTTPClient is
 // nil. Reusing one Client (one transport) isolates tracker traffic from any
 // other HTTP work in the binary and keeps idle tracker connections pooled.
-var defaultClient = &http.Client{Timeout: 30 * time.Second}
+var defaultClient = &http.Client{
+	Timeout:   30 * time.Second,
+	Transport: &http.Transport{DialContext: safeDialer.DialContext},
+}
 
 // Response is the subset of tracker reply fields this client honors.
 type Response struct {

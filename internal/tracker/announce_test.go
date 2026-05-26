@@ -3,6 +3,7 @@ package tracker
 import (
 	"compress/gzip"
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -184,5 +185,56 @@ func TestAnnounceNetworkError(t *testing.T) {
 	_, err := Announce(context.Background(), "http://127.0.0.1:1/", newTestMeta(), c, Params{})
 	if err == nil {
 		t.Fatal("expected network error")
+	}
+}
+
+func TestIsDisallowedIP(t *testing.T) {
+	blocked := []string{
+		"127.0.0.1",
+		"::1",
+		"10.0.0.1",
+		"172.16.0.1",
+		"192.168.1.1",
+		"169.254.0.1",
+		"0.0.0.0",
+	}
+	for _, s := range blocked {
+		ip := net.ParseIP(s)
+		if ip == nil {
+			t.Fatalf("bad test IP %q", s)
+		}
+		if !isDisallowedIP(ip) {
+			t.Errorf("expected %s to be disallowed", s)
+		}
+	}
+
+	public := []string{"1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"}
+	for _, s := range public {
+		ip := net.ParseIP(s)
+		if ip == nil {
+			t.Fatalf("bad test IP %q", s)
+		}
+		if isDisallowedIP(ip) {
+			t.Errorf("expected %s to be allowed", s)
+		}
+	}
+}
+
+func TestDefaultClientBlocksPrivateAddresses(t *testing.T) {
+	blocked := []string{
+		"http://127.0.0.1:80/",
+		"http://10.0.0.1:80/",
+		"http://192.168.1.1:80/",
+		"http://169.254.169.254/",
+	}
+	c, _ := client.New("transmission-4.0.6")
+	for _, u := range blocked {
+		_, err := Announce(context.Background(), u, newTestMeta(), c, Params{})
+		if err == nil {
+			t.Errorf("expected blocked error for %s, got nil", u)
+		}
+		if !strings.Contains(err.Error(), "blocked address") {
+			t.Errorf("unexpected error for %s: %v", u, err)
+		}
 	}
 }
