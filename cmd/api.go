@@ -78,8 +78,8 @@ func startHTTP(cancel context.CancelFunc, mgr *seeder.Manager, opts httpOptions)
 		defMax:           opts.defMax,
 		auth:             opts.auth,
 		publicURL:        opts.publicURL,
-		secure:           opts.tlsCert != "" || strings.HasPrefix(opts.publicURL, "https://"),
-		wsOriginPatterns: wsOrigins(opts.publicURL),
+		secure:           opts.tlsCert != "" || (opts.auth != nil && strings.HasPrefix(opts.publicURL, "https://")),
+		wsOriginPatterns: wsOrigins(opts.publicURL, opts.auth != nil),
 	}
 	pt := newProxyTrust(opts.trustedProxies)
 	perIP := newRateLimiter(1, 10)   // ~1 req/s sustained, burst 10, per client
@@ -103,11 +103,11 @@ func startHTTP(cancel context.CancelFunc, mgr *seeder.Manager, opts httpOptions)
 	go func() {
 		log.Info().Str("addr", opts.addr).Str("scheme", scheme).Strs("mode", mode).Msg("HTTP listening")
 		if opts.withUI {
-			url := opts.publicURL
-			if url == "" {
-				url = fmt.Sprintf("%s://localhost%s", scheme, opts.addr)
+			browseURL := fmt.Sprintf("%s://localhost%s", scheme, opts.addr)
+			if opts.auth != nil && opts.publicURL != "" {
+				browseURL = opts.publicURL
 			}
-			log.Info().Str("url", url).Msg("open this in your browser to use emission")
+			log.Info().Str("url", browseURL).Msg("open this in your browser to use emission")
 		}
 		var err error
 		if opts.tlsCert != "" {
@@ -618,17 +618,35 @@ func (r *statusRecorder) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
 }
 
-// wsOrigins returns the OriginPatterns to accept on /api/ws. When publicURL is
-// set we restrict to that host plus localhost variants (so the vite dev proxy
-// keeps working); otherwise we fall back to the legacy wildcard, which suits
-// local-network deployments where the public URL is unknown.
-func wsOrigins(publicURL string) []string {
-	if publicURL == "" {
-		return []string{"*"}
-	}
+// wsOrigins builds the accepted Origin patterns for /api/ws.
+//
+// Auth ON:  publicURL is the canonical base URL — parse it, take its host.
+// Auth OFF: publicURL is a comma-separated list of raw Origin host patterns
+// (path.Match globs, e.g. "10.0.0.*:8080") for LAN use. A bare "*" is
+// dropped to prevent blanket cross-origin access.
+// In both cases, loopback is always accepted; empty publicURL fails safe to
+// loopback only.
+func wsOrigins(publicURL string, authEnabled bool) []string {
 	patterns := []string{"localhost:*", "127.0.0.1:*", "[::1]:*"}
-	if u, err := url.Parse(publicURL); err == nil && u.Host != "" {
-		patterns = append(patterns, u.Host)
+	if publicURL == "" {
+		return patterns
+	}
+	if authEnabled {
+		if u, err := url.Parse(publicURL); err == nil && u.Host != "" {
+			patterns = append(patterns, u.Host)
+		}
+		return patterns
+	}
+	// Auth off: raw comma-separated origin host patterns (globs).
+	for _, p := range strings.Split(publicURL, ",") {
+		p = strings.TrimSpace(p)
+		if i := strings.Index(p, "://"); i >= 0 {
+			p = p[i+3:] // strip scheme if pasted as a full URL
+		}
+		if p == "" || p == "*" {
+			continue
+		}
+		patterns = append(patterns, p)
 	}
 	return patterns
 }

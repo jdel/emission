@@ -120,27 +120,70 @@ func TestParseSpeedFormOverride(t *testing.T) {
 }
 
 func TestWsOrigins(t *testing.T) {
-	// No public URL → wildcard (local-network mode).
-	if got := wsOrigins(""); len(got) != 1 || got[0] != "*" {
-		t.Errorf("empty publicURL: got %v", got)
+	loopback := []string{"localhost:*", "127.0.0.1:*", "[::1]:*"}
+
+	// Empty publicURL → loopback only (fail safe), regardless of auth mode.
+	for _, authEnabled := range []bool{true, false} {
+		got := wsOrigins("", authEnabled)
+		if len(got) != len(loopback) {
+			t.Errorf("empty publicURL (auth=%v): got %v", authEnabled, got)
+		}
 	}
-	// Public URL → restricted to that host + localhost variants.
-	got := wsOrigins("https://emission.example.com:8443")
+
+	// Auth ON: public URL parsed as canonical base URL.
+	got := wsOrigins("https://emission.example.com:8443", true)
 	want := []string{"localhost:*", "127.0.0.1:*", "[::1]:*", "emission.example.com:8443"}
 	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
+		t.Fatalf("auth on: got %v, want %v", got, want)
 	}
 	for i, w := range want {
 		if got[i] != w {
 			t.Errorf("got[%d] = %q, want %q", i, got[i], w)
 		}
 	}
-	// Malformed publicURL: still returns localhost patterns, drops the bad host.
-	got = wsOrigins("://bad")
+
+	// Auth ON: malformed URL → loopback only, no bad host leaked.
+	got = wsOrigins("://bad", true)
 	for _, p := range got {
 		if strings.Contains(p, "bad") {
 			t.Errorf("malformed URL leaked into patterns: %v", got)
 		}
+	}
+
+	// Auth OFF: publicURL treated as raw glob list.
+	got = wsOrigins("10.0.0.*:8080,*.lan:8080", false)
+	wantSuffixes := []string{"10.0.0.*:8080", "*.lan:8080"}
+	for _, w := range wantSuffixes {
+		found := false
+		for _, p := range got {
+			if p == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("auth off: pattern %q missing from %v", w, got)
+		}
+	}
+
+	// Auth OFF: bare "*" is dropped.
+	got = wsOrigins("*", false)
+	for _, p := range got {
+		if p == "*" {
+			t.Errorf("auth off: bare wildcard must be dropped, got %v", got)
+		}
+	}
+
+	// Auth OFF: scheme prefix stripped when pasted as full URL.
+	got = wsOrigins("http://10.0.0.1:8080", false)
+	found := false
+	for _, p := range got {
+		if p == "10.0.0.1:8080" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("auth off: scheme not stripped, got %v", got)
 	}
 }
 

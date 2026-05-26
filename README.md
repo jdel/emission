@@ -200,8 +200,30 @@ emission serve \
 | `--http.tls.enabled` | `EMISSION_HTTP_TLS_ENABLED` | Serve over HTTPS |
 | `--http.tls.cert`    | `EMISSION_HTTP_TLS_CERT`    | TLS certificate PEM (required with `--http.tls.enabled`) |
 | `--http.tls.key`     | `EMISSION_HTTP_TLS_KEY`     | TLS private key PEM (required with `--http.tls.enabled`) |
-| `--http.public-url`  | `EMISSION_HTTP_PUBLIC_URL`  | Externally reachable base URL (required with `--http.auth`) |
+| `--http.public-url`  | `EMISSION_HTTP_PUBLIC_URL`  | Meaning depends on auth mode — see below |
 | `--http.trusted-proxies` | `EMISSION_HTTP_TRUSTED_PROXIES` | Comma-separated CIDRs whose `X-Forwarded-For` is trusted for rate limiting (e.g. `172.16.0.0/12`). Set to the reverse proxy's subnet when emission is behind a proxy — leaving this empty causes all clients to share the proxy's IP bucket. Only set when **all** traffic genuinely transits the proxy. |
+
+#### `--http.public-url` behavior
+
+The meaning of `--http.public-url` depends on whether `--http.auth` is enabled.
+
+**With `--http.auth` (required).** A single canonical external URL (`scheme://host[:port]`). Used for the passkey (WebAuthn) origin, the `Secure` cookie flag, and invite links — must exactly match what the browser sees. No wildcards.
+
+```sh
+emission serve --http.auth --http.public-url https://emission.example.com
+```
+
+**Without `--http.auth` (LAN / trusted-network use).** Reused to control which browser origins the live-stats WebSocket accepts. Takes a **comma-separated list of origin host patterns** (`host:port`); `*` works as a glob within a pattern. `localhost` is always accepted. Omit the flag and only same-machine browsers can connect to the stats feed.
+
+```sh
+# one fixed LAN address
+emission serve --http.ui --http.public-url 10.0.0.12:8080
+
+# a whole LAN subnet plus a local DNS name
+emission serve --http.ui --http.public-url "10.0.0.*:8080,*.lan:8080"
+```
+
+Each pattern must match the browser's address bar (host and port). A bare `*` is ignored — it would accept any website's cross-origin connection. Only run an auth-off instance on a network you trust.
 
 ---
 
