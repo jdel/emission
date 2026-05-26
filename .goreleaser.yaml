@@ -64,34 +64,17 @@ release:
   draft: true
   prerelease: auto
 
-dockers:
+dockers_v2:
   - use: buildx
     dockerfile: Dockerfile.goreleaser
     image_templates:
-      - "ghcr.io/jdel/emission:{{ .Tag }}-amd64"
+      - "ghcr.io/jdel/emission:{{ .Tag }}"
+      - "ghcr.io/jdel/emission:latest"
     build_flag_templates:
       - "--pull"
-      - "--platform=linux/amd64"
-  - use: buildx
-    dockerfile: Dockerfile.goreleaser
-    image_templates:
-      - "ghcr.io/jdel/emission:{{ .Tag }}-arm64"
-    build_flag_templates:
-      - "--pull"
-      - "--platform=linux/arm64"
-    goarch: arm64
+      - "--platform=linux/amd64,linux/arm64"
 
-docker_manifests:
-  - name_template: "ghcr.io/jdel/emission:{{ .Tag }}"
-    image_templates:
-      - "ghcr.io/jdel/emission:{{ .Tag }}-amd64"
-      - "ghcr.io/jdel/emission:{{ .Tag }}-arm64"
-  - name_template: "ghcr.io/jdel/emission:latest"
-    image_templates:
-      - "ghcr.io/jdel/emission:{{ .Tag }}-amd64"
-      - "ghcr.io/jdel/emission:{{ .Tag }}-arm64"
-
-brews:
+homebrew:
   - name: emission
     directory: Formula
     repository:
