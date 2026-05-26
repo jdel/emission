@@ -52,7 +52,6 @@ type authStatusResponse struct {
 	AuthEnabled        bool   `json:"authEnabled"`
 	Authenticated      bool   `json:"authenticated"`
 	Username           string `json:"username,omitempty"`
-	DeviceCount        int    `json:"deviceCount,omitempty"`
 	BootstrapAvailable bool   `json:"bootstrapAvailable,omitempty"`
 }
 

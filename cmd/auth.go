@@ -38,7 +38,6 @@ func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
 		AuthEnabled:        true,
 		Authenticated:      authed,
 		Username:           username,
-		DeviceCount:        s.auth.CredentialCount(),
 		BootstrapAvailable: s.auth.BootstrapOpen(),
 	})
 }

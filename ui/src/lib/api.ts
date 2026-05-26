@@ -135,7 +135,6 @@ export interface AuthStatus {
   authEnabled: boolean // false = no auth configured, everything is open
   authenticated: boolean
   username?: string // the logged-in user, when authenticated
-  deviceCount?: number
   bootstrapAvailable?: boolean // admin-setup window is open
 }
 

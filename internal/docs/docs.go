@@ -628,9 +628,6 @@ const docTemplate = `{
                 "bootstrapAvailable": {
                     "type": "boolean"
                 },
-                "deviceCount": {
-                    "type": "integer"
-                },
                 "username": {
                     "type": "string"
                 }
