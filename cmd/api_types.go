@@ -29,8 +29,9 @@ type wsMessage struct {
 
 // uploadResult is the POST /api/torrents response.
 type uploadResult struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Notice string `json:"notice,omitempty"` // set when tracker URLs were truncated
 }
 
 // speedUpdate is the PATCH /api/torrents/{id} request body.

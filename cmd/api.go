@@ -284,7 +284,15 @@ func (s *server) uploadTorrent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not save torrent file")
 		return
 	}
-	writeJSON(w, http.StatusAccepted, uploadResult{ID: id, Name: meta.Name})
+	res := uploadResult{ID: id, Name: meta.Name}
+	if meta.TruncatedTrackers > 0 {
+		res.Notice = fmt.Sprintf(
+			"%d tracker URL(s) found; only the first %d were kept (emission targets private trackers).",
+			meta.TruncatedTrackers+len(meta.AnnounceURLs), len(meta.AnnounceURLs))
+		log.Warn().Str("torrent", meta.Name).Int("found", meta.TruncatedTrackers+len(meta.AnnounceURLs)).
+			Int("kept", len(meta.AnnounceURLs)).Msg("announce list truncated")
+	}
+	writeJSON(w, http.StatusAccepted, res)
 }
 
 // parseSpeedForm pulls optional min-speed / max-speed / max-ratio values from

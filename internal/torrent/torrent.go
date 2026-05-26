@@ -27,6 +27,9 @@ type Meta struct {
 	// InfoHashURLEncoded is InfoHash percent-encoded for use in the
 	// {infohash} query placeholder.
 	InfoHashURLEncoded string
+	// TruncatedTrackers is the number of tracker URLs dropped because the
+	// announce list exceeded maxAnnounceURLs. Zero means nothing was dropped.
+	TruncatedTrackers int
 }
 
 // FromFile reads and parses a .torrent file at path.
@@ -69,7 +72,7 @@ func Parse(data []byte) (*Meta, error) {
 		private = true
 	}
 
-	urls := announceURLs(root)
+	urls, found := announceURLs(root)
 	if len(urls) == 0 {
 		return nil, fmt.Errorf("no announce URLs in torrent")
 	}
@@ -81,6 +84,7 @@ func Parse(data []byte) (*Meta, error) {
 		AnnounceURLs:       urls,
 		InfoHash:           hash,
 		InfoHashURLEncoded: urlEncodeBytes(hash[:]),
+		TruncatedTrackers:  found - len(urls),
 	}, nil
 }
 
@@ -119,18 +123,27 @@ func totalLength(info bencode.Value) (uint64, error) {
 	return total, nil
 }
 
+// maxAnnounceURLs is the maximum number of tracker URLs kept per torrent.
+// Private trackers use one announce URL (occasionally 2-3 redundant variants);
+// anything beyond this is a sign of abuse or an unusable public torrent.
+const maxAnnounceURLs = 5
+
 // announceURLs gathers the union of "announce" and all URLs nested in
 // "announce-list" (a list of tiers, each a list of URL strings).
 // Only http(s) URLs are kept; UDP and others are skipped for this build.
-func announceURLs(root bencode.Value) []string {
-	var out []string
+// Returns the kept URLs and the total number of distinct supported URLs found
+// before truncation, so callers can surface a notice when extras were dropped.
+func announceURLs(root bencode.Value) (kept []string, found int) {
 	seen := map[string]bool{}
 	add := func(s string) {
 		if !isSupportedHTTP(s) || seen[s] {
 			return
 		}
 		seen[s] = true
-		out = append(out, s)
+		found++
+		if len(kept) < maxAnnounceURLs {
+			kept = append(kept, s)
+		}
 	}
 	if al, ok := root.Dict["announce-list"]; ok && al.Kind == bencode.KindList {
 		for _, tier := range al.List {
@@ -147,7 +160,7 @@ func announceURLs(root bencode.Value) []string {
 	if a, ok := root.Dict["announce"]; ok && a.Kind == bencode.KindBytes {
 		add(string(a.Bytes))
 	}
-	return out
+	return kept, found
 }
 
 // isSupportedHTTP returns true for http(s) URLs that aren't on the .local

@@ -216,3 +216,69 @@ func TestParseNoLengthOrFiles(t *testing.T) {
 		t.Fatal("expected error for info without length or files")
 	}
 }
+
+func TestAnnounceURLsCap(t *testing.T) {
+	// Build a torrent with more tracker URLs than the cap.
+	n := maxAnnounceURLs + 3
+	var tiers string
+	for i := 0; i < n; i++ {
+		url := bstr(fmt.Sprintf("http://tracker%d.example/a", i))
+		tiers += "l" + url + "e"
+	}
+	data := []byte("d" +
+		bstr("announce-list") + "l" + tiers + "e" +
+		bstr("info") + "d" +
+		bstr("length") + "i1024e" +
+		bstr("name") + bstr("foo") +
+		bstr("piece length") + "i16384e" +
+		bstr("pieces") + bstr(pieces) +
+		"e" +
+		"e")
+
+	meta, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meta.AnnounceURLs) != maxAnnounceURLs {
+		t.Errorf("kept %d URLs, want %d", len(meta.AnnounceURLs), maxAnnounceURLs)
+	}
+	if meta.TruncatedTrackers != n-maxAnnounceURLs {
+		t.Errorf("TruncatedTrackers = %d, want %d", meta.TruncatedTrackers, n-maxAnnounceURLs)
+	}
+}
+
+func TestAnnounceURLsNoCap(t *testing.T) {
+	meta, err := Parse(minimalTorrent(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.TruncatedTrackers != 0 {
+		t.Errorf("expected no truncation, got TruncatedTrackers=%d", meta.TruncatedTrackers)
+	}
+}
+
+func TestAnnounceURLsDedup(t *testing.T) {
+	// Same URL in announce-list and announce — should count once.
+	url := "http://t.example/a"
+	tier := "l" + bstr(url) + "e"
+	data := []byte("d" +
+		bstr("announce") + bstr(url) +
+		bstr("announce-list") + "l" + tier + "e" +
+		bstr("info") + "d" +
+		bstr("length") + "i1024e" +
+		bstr("name") + bstr("foo") +
+		bstr("piece length") + "i16384e" +
+		bstr("pieces") + bstr(pieces) +
+		"e" +
+		"e")
+	meta, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meta.AnnounceURLs) != 1 {
+		t.Errorf("expected 1 deduped URL, got %d: %v", len(meta.AnnounceURLs), meta.AnnounceURLs)
+	}
+	if meta.TruncatedTrackers != 0 {
+		t.Errorf("expected no truncation for deduped URL")
+	}
+}

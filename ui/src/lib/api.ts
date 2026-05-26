@@ -37,6 +37,7 @@ export interface Torrent {
 export interface UploadResult {
   id: string
   name: string
+  notice?: string
 }
 
 export interface PagedTorrents {

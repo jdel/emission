@@ -164,6 +164,7 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
       for (const file of files) {
         const t = await uploadTorrent(file)
         toast.success(`Added ${t.name}`)
+        if (t.notice) toast.warning(t.notice)
       }
       reloadRef.current()
     } catch (e) {
