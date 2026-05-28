@@ -2,6 +2,8 @@ package seeder
 
 import (
 	"context"
+	"math"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -236,7 +238,20 @@ func (s *session) accumulateLoop() {
 			if rate == 0 {
 				continue
 			}
-			s.uploaded.Add(rate)
+			// Cap at MaxInt64 to keep the signed arithmetic below safe. Real
+			// rates are orders of magnitude smaller than this; the cap is a
+			// belt-and-braces guard, not an expected branch.
+			if rate > math.MaxInt64 {
+				rate = math.MaxInt64
+			}
+			// One signed draw in [-span, +span], span = ~20% of rate.
+			span := int64(rate/5 + 1)
+			delta := rand.Int64N(2*span+1) - span
+			n := int64(rate) + delta
+			if n < 1 {
+				n = 1 // never accumulate zero/negative
+			}
+			s.uploaded.Add(uint64(n))
 		}
 	}
 }
