@@ -76,6 +76,7 @@ type trackerState struct {
 	minIntervalSec atomic.Int64
 	nextUnixMs     atomic.Int64
 	state          atomic.Int32
+	trackerID      atomic.Value // string; empty until the tracker issues one
 }
 
 func newSession(parent context.Context, id string, meta *torrent.Meta, path string, minSpeed, maxSpeed uint64, maxRatio float64, addedAt time.Time, cl *client.Client, m *Manager) *session {
@@ -258,11 +259,13 @@ func (s *session) accumulateLoop() {
 // than the tracker's reported "min interval", even after an error backoff.
 func (s *session) runTracker(ts *trackerState) {
 	params := func(ev tracker.Event) tracker.Params {
+		tid, _ := ts.trackerID.Load().(string)
 		return tracker.Params{
 			Port:       s.client.Port,
 			Uploaded:   s.uploaded.Load(),
 			Downloaded: s.meta.Length,
 			Event:      ev,
+			TrackerID:  tid,
 			HTTPClient: s.mgr.httpClient,
 		}
 	}
@@ -378,6 +381,9 @@ func (ts *trackerState) apply(resp *tracker.Response, err error) {
 	ts.leechers.Store(int64(resp.Leechers))
 	ts.intervalSec.Store(int64(resp.Interval / time.Second))
 	ts.minIntervalSec.Store(int64(resp.MinInterval / time.Second))
+	if resp.TrackerID != "" {
+		ts.trackerID.Store(resp.TrackerID)
+	}
 }
 
 // setNext records when this tracker will next announce.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jdel/emission/internal/client"
+	"github.com/jdel/emission/internal/tracker"
 )
 
 // newTrackerServer returns an httptest server that answers every announce
@@ -381,6 +382,22 @@ func TestRelPath(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "elsewhere.torrent")
 	if got := m.relPath(outside); got != "elsewhere.torrent" {
 		t.Errorf("outside-root relPath = %q, want elsewhere.torrent", got)
+	}
+}
+
+func TestTrackerStateStoresTrackerID(t *testing.T) {
+	ts := &trackerState{url: "http://t.example/a"}
+
+	// First response issues an ID.
+	ts.apply(&tracker.Response{TrackerID: "tid-1"}, nil)
+	if got, _ := ts.trackerID.Load().(string); got != "tid-1" {
+		t.Errorf("trackerID = %q, want tid-1", got)
+	}
+
+	// A later response without an ID must not clobber the stored one.
+	ts.apply(&tracker.Response{}, nil)
+	if got, _ := ts.trackerID.Load().(string); got != "tid-1" {
+		t.Errorf("trackerID overwritten to %q, want tid-1", got)
 	}
 }
 

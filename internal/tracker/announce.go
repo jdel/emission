@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"syscall"
@@ -36,6 +37,9 @@ type Params struct {
 	Left       uint64
 	Event      Event
 	NumWant    int
+	// TrackerID, when non-empty, is echoed back as trackerid= on follow-up
+	// announces (the value a tracker sent in an earlier response).
+	TrackerID string
 	// HTTPClient sends the request. When nil a package-level default is used.
 	HTTPClient *http.Client
 }
@@ -166,6 +170,9 @@ func BuildURL(trackerURL string, m *torrent.Meta, c *client.Client, p Params) st
 	}
 	// Common pattern in some templates: "ipv6={ipv6}" becomes "ipv6=" — leave
 	// it; trackers accept empty values.
+	if p.TrackerID != "" {
+		out += "&trackerid=" + url.QueryEscape(p.TrackerID)
+	}
 	return out
 }
 

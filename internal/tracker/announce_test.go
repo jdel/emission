@@ -102,6 +102,24 @@ func TestBuildURLOmitsEmptyEvent(t *testing.T) {
 	}
 }
 
+func TestBuildURLTrackerID(t *testing.T) {
+	c, err := client.New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &torrent.Meta{InfoHashURLEncoded: "%aa%bb"}
+
+	// Absent when empty.
+	if got := BuildURL("http://t.example/a", m, c, Params{Event: EventNone}); strings.Contains(got, "trackerid=") {
+		t.Errorf("unexpected trackerid in %s", got)
+	}
+	// Appended and URL-escaped when present.
+	got := BuildURL("http://t.example/a", m, c, Params{Event: EventNone, TrackerID: "abc 1/2"})
+	if !strings.Contains(got, "trackerid=abc+1%2F2") {
+		t.Errorf("missing/unescaped trackerid in %s", got)
+	}
+}
+
 func TestParseTrackerResponse(t *testing.T) {
 	// Real-ish response: complete=5, incomplete=2, interval=1800
 	body := []byte("d8:completei5e10:incompletei2e8:intervali1800ee")
