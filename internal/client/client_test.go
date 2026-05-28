@@ -78,3 +78,37 @@ func TestRegenerateKey(t *testing.T) {
 	}
 	t.Errorf("key did not change across 10 regenerations: %s", first)
 }
+
+func TestCloneFreshIdentity(t *testing.T) {
+	c, err := New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := c.Clone()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.PeerID == c.PeerID {
+		t.Error("clone reused peer id")
+	}
+	if n.Key == c.Key {
+		t.Error("clone reused key")
+	}
+	if n.Version != c.Version || n.NumWant != c.NumWant || n.NumWantOnStop != c.NumWantOnStop {
+		t.Error("clone changed profile settings")
+	}
+}
+
+func TestEphemeralPortRangeAndVaries(t *testing.T) {
+	first := ephemeralPort()
+	for i := 0; i < 20; i++ {
+		p := ephemeralPort()
+		if p < 49152 || p > 65534 {
+			t.Fatalf("port %d outside ephemeral range 49152-65534", p)
+		}
+		if p != first {
+			return
+		}
+	}
+	t.Errorf("ephemeralPort returned %d for 21 consecutive draws", first)
+}

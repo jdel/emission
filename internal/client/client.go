@@ -10,7 +10,16 @@
 // scheduler. Refresh metadata is exposed via [Client.Profile].
 package client
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand/v2"
+)
+
+// ephemeralPort returns a random TCP port in the IANA dynamic range
+// (49152–65534) — the range real clients pick a listen port from.
+func ephemeralPort() uint16 {
+	return uint16(49152 + rand.IntN(65534-49152+1))
+}
 
 // Client is a torrent client identity used for HTTP tracker announces.
 // It carries a generated peer_id and key, the URL query template, and the
@@ -33,6 +42,10 @@ type Client struct {
 	NumWant int
 	// NumWantOnStop is the peer count to request on event=stopped.
 	NumWantOnStop int
+	// Port is the listen port advertised to trackers. Cosmetic — we never
+	// accept peer connections — but a fixed port is a static fingerprint, so
+	// each identity picks one random ephemeral port at construction.
+	Port uint16
 }
 
 // New builds a Client for the named profile version (e.g. "transmission-4.0.6").
@@ -51,6 +64,7 @@ func New(version string) (*Client, error) {
 		Profile:       p,
 		NumWant:       p.NumWant,
 		NumWantOnStop: p.NumWantOnStop,
+		Port:          ephemeralPort(),
 	}
 	if err := c.GeneratePeerID(); err != nil {
 		return nil, fmt.Errorf("generate peer id: %w", err)
@@ -70,6 +84,7 @@ func (c *Client) Clone() (*Client, error) {
 		Profile:       c.Profile,
 		NumWant:       c.NumWant,
 		NumWantOnStop: c.NumWantOnStop,
+		Port:          ephemeralPort(),
 	}
 	if err := n.GeneratePeerID(); err != nil {
 		return nil, fmt.Errorf("clone peer id: %w", err)

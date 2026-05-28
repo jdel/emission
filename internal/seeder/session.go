@@ -25,11 +25,6 @@ const (
 // rateRefresh is how often a session picks a new simulated upload rate.
 const rateRefresh = 30 * time.Second
 
-// advertisedPort is the listening port reported to trackers. We never actually
-// accept peer connections, so the value is cosmetic — 6881 is the canonical
-// BitTorrent port and plausible for any client.
-const advertisedPort = 6881
-
 // stopAnnounceTimeout caps the final "stopped" announce sent at shutdown — it
 // is a courtesy, so a slow or dead tracker must not delay exit.
 const stopAnnounceTimeout = 5 * time.Second
@@ -264,7 +259,7 @@ func (s *session) accumulateLoop() {
 func (s *session) runTracker(ts *trackerState) {
 	params := func(ev tracker.Event) tracker.Params {
 		return tracker.Params{
-			Port:       advertisedPort,
+			Port:       s.client.Port,
 			Uploaded:   s.uploaded.Load(),
 			Downloaded: s.meta.Length,
 			Event:      ev,
