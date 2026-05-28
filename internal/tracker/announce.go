@@ -143,7 +143,11 @@ func BuildURL(trackerURL string, m *torrent.Meta, c *client.Client, p Params) st
 	out = strings.ReplaceAll(out, "{event}", string(p.Event))
 	numwant := p.NumWant
 	if numwant == 0 {
-		numwant = c.NumWant
+		if p.Event == EventStopped {
+			numwant = c.NumWantOnStop
+		} else {
+			numwant = c.NumWant
+		}
 	}
 	out = strings.ReplaceAll(out, "{numwant}", strconv.Itoa(numwant))
 	// Strip placeholders we don't support so the URL is still valid.

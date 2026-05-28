@@ -47,6 +47,34 @@ func TestBuildURLSubstitutes(t *testing.T) {
 	}
 }
 
+func TestBuildURLNumWantFallback(t *testing.T) {
+	// transmission-4.0.6: numwant=80, numwantOnStop=0.
+	c, err := client.New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &torrent.Meta{InfoHashURLEncoded: "%aa%bb"}
+
+	cases := []struct {
+		name string
+		p    Params
+		want string
+	}{
+		{"regular uses NumWant", Params{Event: EventNone}, "numwant=80"},
+		{"started uses NumWant", Params{Event: EventStarted}, "numwant=80"},
+		{"stop uses NumWantOnStop", Params{Event: EventStopped}, "numwant=0"},
+		{"explicit overrides on stop", Params{Event: EventStopped, NumWant: 50}, "numwant=50"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := BuildURL("http://t.example/a", m, c, tc.p)
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("missing %q in %s", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestParseTrackerResponse(t *testing.T) {
 	// Real-ish response: complete=5, incomplete=2, interval=1800
 	body := []byte("d8:completei5e10:incompletei2e8:intervali1800ee")
