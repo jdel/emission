@@ -140,7 +140,17 @@ func BuildURL(trackerURL string, m *torrent.Meta, c *client.Client, p Params) st
 	out = strings.ReplaceAll(out, "{uploaded}", strconv.FormatUint(p.Uploaded, 10))
 	out = strings.ReplaceAll(out, "{downloaded}", strconv.FormatUint(p.Downloaded, 10))
 	out = strings.ReplaceAll(out, "{left}", strconv.FormatUint(p.Left, 10))
-	out = strings.ReplaceAll(out, "{event}", string(p.Event))
+	if p.Event == EventNone {
+		// Real clients omit event entirely on regular announces. Drop the
+		// whole token rather than leave a bare event=.
+		out = strings.ReplaceAll(out, "{event}", "")
+		out = strings.ReplaceAll(out, "&event=&", "&")
+		out = strings.ReplaceAll(out, "?event=&", "?")
+		out = strings.TrimSuffix(out, "&event=")
+		out = strings.TrimSuffix(out, "?event=")
+	} else {
+		out = strings.ReplaceAll(out, "{event}", string(p.Event))
+	}
 	numwant := p.NumWant
 	if numwant == 0 {
 		if p.Event == EventStopped {

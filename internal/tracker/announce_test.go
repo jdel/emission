@@ -75,6 +75,33 @@ func TestBuildURLNumWantFallback(t *testing.T) {
 	}
 }
 
+func TestBuildURLOmitsEmptyEvent(t *testing.T) {
+	c, err := client.New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &torrent.Meta{InfoHashURLEncoded: "%aa%bb"}
+
+	// Regular announce: event must be absent entirely, not a bare event=.
+	none := BuildURL("http://t.example/a", m, c, Params{Event: EventNone})
+	if strings.Contains(none, "event=") {
+		t.Errorf("EventNone left an event= in %s", none)
+	}
+	if strings.Contains(none, "&&") || strings.HasSuffix(none, "&") {
+		t.Errorf("EventNone produced a malformed query: %s", none)
+	}
+
+	// Non-empty events must survive intact, with the key left untouched
+	// (guards the strip-on-substring regression).
+	started := BuildURL("http://t.example/a", m, c, Params{Event: EventStarted})
+	if !strings.Contains(started, "event=started") {
+		t.Errorf("missing event=started in %s", started)
+	}
+	if !strings.Contains(started, "key="+c.Key) {
+		t.Errorf("key corrupted by event handling in %s", started)
+	}
+}
+
 func TestParseTrackerResponse(t *testing.T) {
 	// Real-ish response: complete=5, incomplete=2, interval=1800
 	body := []byte("d8:completei5e10:incompletei2e8:intervali1800ee")
