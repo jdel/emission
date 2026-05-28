@@ -99,6 +99,23 @@ func TestCloneFreshIdentity(t *testing.T) {
 	}
 }
 
+func TestGenFromPatternLatin1(t *testing.T) {
+	// High codepoints must map to one byte each (Latin-1), not inflate to
+	// multi-byte UTF-8 (which would leave a 0xc2/0xc3 signature).
+	raw, err := genFromPattern("[\u008d\u00ad]{16}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) != 16 {
+		t.Fatalf("len = %d, want 16 (one byte per char)", len(raw))
+	}
+	for _, b := range raw {
+		if b != 0x8d && b != 0xad {
+			t.Errorf("byte %#x not in {0x8d,0xad}: UTF-8 inflation?", b)
+		}
+	}
+}
+
 func TestEphemeralPortRangeAndVaries(t *testing.T) {
 	first := ephemeralPort()
 	for i := 0; i < 20; i++ {

@@ -4,8 +4,19 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"strconv"
-	"strings"
 )
+
+// indexRune returns the index of the first occurrence of target in rs, or -1.
+// Unlike strings.IndexRune it returns a rune offset (not a byte offset), so it
+// is safe to use as a slice index into a []rune holding multi-byte runes.
+func indexRune(rs []rune, target rune) int {
+	for i, r := range rs {
+		if r == target {
+			return i
+		}
+	}
+	return -1
+}
 
 // regexAtom is one node of the parsed regex. Each atom contributes between
 // 1 and repeat runes to the output, drawn uniformly from chars.
@@ -37,7 +48,7 @@ func parseRegex(pattern string) ([]regexAtom, error) {
 		case ')':
 			i++
 		case '[':
-			end := strings.IndexRune(string(runes[i:]), ']')
+			end := indexRune(runes[i:], ']')
 			if end < 0 {
 				return nil, fmt.Errorf("unclosed [ in %q", pattern)
 			}
@@ -49,7 +60,7 @@ func parseRegex(pattern string) ([]regexAtom, error) {
 			atoms = append(atoms, regexAtom{chars: chars, repeat: 1})
 			i += end + 1
 		case '{':
-			end := strings.IndexRune(string(runes[i:]), '}')
+			end := indexRune(runes[i:], '}')
 			if end < 0 {
 				return nil, fmt.Errorf("unclosed { in %q", pattern)
 			}
@@ -132,23 +143,26 @@ func parseClass(class []rune) ([]rune, error) {
 	return out, nil
 }
 
-// genFromPattern parses pattern and returns a UTF-8 byte sequence matching
-// it. The length in bytes can exceed the regex's "char count" because
-// codepoints >= 0x80 encode to 2+ bytes — callers must truncate to the
-// required peer_id or key length after encoding.
+// genFromPattern parses pattern and returns the byte sequence it describes,
+// one byte per matched character. peer_id and key are raw byte fields, and the
+// profile patterns draw from codepoints 0x01–0xFF, so each character maps to a
+// single Latin-1 byte — matching the on-wire layout real clients produce.
+// Encoding as UTF-8 instead would inflate codepoints >= 0x80 to two bytes
+// (e.g. 0x8d -> 0xc2 0x8d), corrupting the byte values and leaving a 0xc2/0xc3
+// signature no real client emits. Callers truncate to the required length.
 func genFromPattern(pattern string) ([]byte, error) {
 	atoms, err := parseRegex(pattern)
 	if err != nil {
 		return nil, err
 	}
-	var b strings.Builder
+	var out []byte
 	for _, a := range atoms {
 		if len(a.chars) == 0 {
 			continue
 		}
 		for n := 0; n < a.repeat; n++ {
-			b.WriteRune(a.chars[rand.IntN(len(a.chars))])
+			out = append(out, byte(a.chars[rand.IntN(len(a.chars))]))
 		}
 	}
-	return []byte(b.String()), nil
+	return out, nil
 }
