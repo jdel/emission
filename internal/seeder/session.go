@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jdel/emission/internal/client"
 	"github.com/jdel/emission/internal/torrent"
 	"github.com/jdel/emission/internal/tracker"
 	"github.com/jdel/emission/internal/units"
@@ -45,6 +46,7 @@ type session struct {
 	meta     *torrent.Meta
 	path     string // absolute path of the backing .torrent file
 	addedAt  time.Time
+	client   *client.Client // owner-scoped identity; not shared across users
 	mgr      *Manager
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -81,13 +83,14 @@ type trackerState struct {
 	state          atomic.Int32
 }
 
-func newSession(parent context.Context, id string, meta *torrent.Meta, path string, minSpeed, maxSpeed uint64, maxRatio float64, addedAt time.Time, m *Manager) *session {
+func newSession(parent context.Context, id string, meta *torrent.Meta, path string, minSpeed, maxSpeed uint64, maxRatio float64, addedAt time.Time, cl *client.Client, m *Manager) *session {
 	ctx, cancel := context.WithCancel(parent)
 	s := &session{
 		id:       id,
 		meta:     meta,
 		path:     path,
 		addedAt:  addedAt,
+		client:   cl,
 		mgr:      m,
 		ctx:      ctx,
 		cancel:   cancel,
@@ -277,7 +280,7 @@ func (s *session) runTracker(ts *trackerState) {
 	if s.ctx.Err() != nil {
 		return
 	}
-	resp, err := tracker.Announce(s.ctx, ts.url, s.meta, s.mgr.client, params(tracker.EventStarted))
+	resp, err := tracker.Announce(s.ctx, ts.url, s.meta, s.client, params(tracker.EventStarted))
 	knownMin = maxDur(knownMin, minInterval(resp))
 	ts.apply(resp, err)
 	interval = clampMin(pickInterval(resp, err, 30*time.Minute), knownMin)
@@ -291,14 +294,14 @@ func (s *session) runTracker(ts *trackerState) {
 		select {
 		case <-s.ctx.Done():
 			stopCtx, cancel := context.WithTimeout(context.Background(), stopAnnounceTimeout)
-			resp, err := tracker.Announce(stopCtx, ts.url, s.meta, s.mgr.client, params(tracker.EventStopped))
+			resp, err := tracker.Announce(stopCtx, ts.url, s.meta, s.client, params(tracker.EventStopped))
 			cancel()
 			logAnnounce(s.meta.Name, ts.url, tracker.EventStopped, resp, err, s.uploaded.Load(), 0)
 			s.saveStateFile()
 			return
 		case <-timer.C:
 		}
-		resp, err := tracker.Announce(s.ctx, ts.url, s.meta, s.mgr.client, params(tracker.EventNone))
+		resp, err := tracker.Announce(s.ctx, ts.url, s.meta, s.client, params(tracker.EventNone))
 		knownMin = maxDur(knownMin, minInterval(resp))
 		ts.apply(resp, err)
 		next := pickInterval(resp, err, interval)

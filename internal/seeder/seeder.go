@@ -88,6 +88,9 @@ type Manager struct {
 	byPath   map[string]*session // by absolute .torrent path
 	wg       sync.WaitGroup
 
+	clientMu    sync.Mutex
+	userClients map[string]*client.Client // per-owner identity; "" = unowned/root
+
 	subsMu sync.Mutex
 	subs   map[chan struct{}]struct{}
 
@@ -95,20 +98,20 @@ type Manager struct {
 	statSubs   map[chan StatUpdate]struct{}
 }
 
-// New creates a Manager. client is the BitTorrent identity used for every
-// torrent; torrentsDir is the watched root that .torrent file paths are
-// reported relative to; maxRatio caps the simulated upload at that multiple
-// of the torrent size (0 = unlimited); autoRemove removes the torrent
-// automatically when the cap is reached. To override the peer count requested
-// per announce, set client.NumWant before passing it in.
-func New(client *client.Client, torrentsDir string, maxRatio float64, autoRemove bool) *Manager {
+// New creates a Manager. tmpl is the template BitTorrent identity that each
+// owner's identity is cloned from; torrentsDir is the watched root that
+// .torrent file paths are reported relative to; maxRatio caps the simulated
+// upload at that multiple of the torrent size (0 = unlimited); autoRemove
+// removes the torrent automatically when the cap is reached. To override the
+// peer count requested per announce, set tmpl.NumWant before passing it in.
+func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove bool) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	abs, err := filepath.Abs(torrentsDir)
 	if err != nil {
 		abs = torrentsDir
 	}
 	return &Manager{
-		client:      client,
+		client:      tmpl,
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		maxRatio:    maxRatio,
 		autoRemove:  autoRemove,
@@ -117,9 +120,28 @@ func New(client *client.Client, torrentsDir string, maxRatio float64, autoRemove
 		cancel:      cancel,
 		sessions:    make(map[string]*session),
 		byPath:      make(map[string]*session),
+		userClients: make(map[string]*client.Client),
 		subs:        make(map[chan struct{}]struct{}),
 		statSubs:    make(map[chan StatUpdate]struct{}),
 	}
+}
+
+// clientFor returns the BitTorrent identity for owner, cloning the template
+// client on first use and reusing it thereafter. Each owner (and the
+// unowned/root bucket, "") gets one stable peer_id and key, so a tracker sees a
+// consistent identity per user rather than one shared across all of them.
+func (m *Manager) clientFor(owner string) (*client.Client, error) {
+	m.clientMu.Lock()
+	defer m.clientMu.Unlock()
+	if cl, ok := m.userClients[owner]; ok {
+		return cl, nil
+	}
+	cl, err := m.client.Clone()
+	if err != nil {
+		return nil, err
+	}
+	m.userClients[owner] = cl
+	return cl, nil
 }
 
 // AddFile reads and parses the .torrent file at path and starts seeding it at a
@@ -168,7 +190,11 @@ func (m *Manager) AddFile(path string, minSpeed, maxSpeed uint64) (Status, error
 	if _, dup := m.sessions[id]; dup {
 		return Status{}, fmt.Errorf("torrent already loaded: %s", meta.Name)
 	}
-	s := newSession(m.baseCtx, id, meta, abs, minSpeed, maxSpeed, maxRatio, addedAt, m)
+	cl, err := m.clientFor(Owner(m.relPath(abs)))
+	if err != nil {
+		return Status{}, fmt.Errorf("client identity: %w", err)
+	}
+	s := newSession(m.baseCtx, id, meta, abs, minSpeed, maxSpeed, maxRatio, addedAt, cl, m)
 	if uploadedBytes > 0 {
 		s.uploaded.Store(uploadedBytes)
 	}

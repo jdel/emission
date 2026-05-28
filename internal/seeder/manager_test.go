@@ -383,3 +383,30 @@ func TestRelPath(t *testing.T) {
 		t.Errorf("outside-root relPath = %q, want elsewhere.torrent", got)
 	}
 }
+
+func TestClientForPerOwner(t *testing.T) {
+	m := newTestManager(t, t.TempDir())
+
+	alice1, err := m.clientFor("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice2, err := m.clientFor("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := m.clientFor("bob")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if alice1 != alice2 {
+		t.Error("same owner should reuse one client instance")
+	}
+	if alice1.PeerID == bob.PeerID {
+		t.Errorf("different owners share a peer ID: %q", alice1.PeerID)
+	}
+	if alice1.PeerID == m.client.PeerID {
+		t.Error("clone reused the template peer ID")
+	}
+}

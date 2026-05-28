@@ -61,6 +61,25 @@ func New(version string) (*Client, error) {
 	return c, nil
 }
 
+// Clone returns a new Client with the same profile and peer-count settings but
+// a freshly generated peer_id and key, giving each logical peer (e.g. a
+// distinct user) its own stable identity. The clones are independent.
+func (c *Client) Clone() (*Client, error) {
+	n := &Client{
+		Version:       c.Version,
+		Profile:       c.Profile,
+		NumWant:       c.NumWant,
+		NumWantOnStop: c.NumWantOnStop,
+	}
+	if err := n.GeneratePeerID(); err != nil {
+		return nil, fmt.Errorf("clone peer id: %w", err)
+	}
+	if err := n.GenerateKey(); err != nil {
+		return nil, fmt.Errorf("clone key: %w", err)
+	}
+	return n, nil
+}
+
 // GeneratePeerID generates a fresh peer_id, URL-encodes it, and stores it
 // in c.PeerID. Call this when the profile's peer refresh policy says it's
 // time (e.g. TORRENT_VOLATILE → new ID per torrent session).
