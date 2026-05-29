@@ -20,9 +20,9 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/jdel/emission/internal/auth"
 	"github.com/jdel/emission/internal/seeder"
-	"github.com/jdel/emission/internal/web"
 	"github.com/jdel/emission/internal/torrent"
 	"github.com/jdel/emission/internal/units"
+	"github.com/jdel/emission/internal/web"
 	"github.com/rs/zerolog/log"
 )
 
@@ -43,7 +43,6 @@ var infoHashRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 type server struct {
 	mgr         *seeder.Manager
 	torrentsDir string // where uploaded .torrent files are written
-	defMin      uint64
 	defMax      uint64
 
 	auth             *auth.Service // nil when authentication is disabled
@@ -58,7 +57,6 @@ type httpOptions struct {
 	addr           string
 	torrentsDir    string
 	withUI         bool
-	defMin         uint64
 	defMax         uint64
 	tlsCert        string // empty = plain HTTP
 	tlsKey         string
@@ -74,7 +72,6 @@ func startHTTP(cancel context.CancelFunc, mgr *seeder.Manager, opts httpOptions)
 	srv := &server{
 		mgr:              mgr,
 		torrentsDir:      opts.torrentsDir,
-		defMin:           opts.defMin,
 		defMax:           opts.defMax,
 		auth:             opts.auth,
 		publicURL:        opts.publicURL,
@@ -136,6 +133,11 @@ func newMux(srv *server, withUI bool, rl *rpsLimiter) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/torrents/{id}", srv.removeTorrent)
 	mux.HandleFunc("GET /api/ws", srv.handleWS)
 
+	// The caller's own upload bandwidth ceiling (works with auth off too, where
+	// the owner is the root "" bucket).
+	mux.HandleFunc("GET /api/bandwidth", srv.getBandwidth)
+	mux.HandleFunc("PUT /api/bandwidth", srv.setMyBandwidth)
+
 	// Auth: status is always reachable so the UI knows whether to show login.
 	// The rest of the auth routes only exist when authentication is enabled.
 	mux.HandleFunc("GET /api/auth/status", srv.authStatus)
@@ -154,6 +156,7 @@ func newMux(srv *server, withUI bool, rl *rpsLimiter) *http.ServeMux {
 		mux.HandleFunc("GET /api/auth/users", srv.authUsers)
 		mux.HandleFunc("DELETE /api/auth/credentials/{id}", srv.authRemoveCredential)
 		mux.HandleFunc("DELETE /api/auth/users/{username}", srv.authRemoveUser)
+		mux.HandleFunc("PUT /api/auth/users/{username}/bandwidth", srv.setUserBandwidth)
 		// Pending invite management (admin only).
 		mux.HandleFunc("GET /api/auth/invites", srv.authListInvites)
 		mux.HandleFunc("DELETE /api/auth/invites/{token}", srv.authRevokeInvite)
@@ -210,7 +213,6 @@ func (s *server) listTorrents(w http.ResponseWriter, r *http.Request) {
 //	@Accept		multipart/form-data
 //	@Produce	json
 //	@Param		file		formData	file	true	"Torrent file (.torrent)"
-//	@Param		min-speed	formData	string	false	"Minimum upload rate (e.g. 200K)"
 //	@Param		max-speed	formData	string	false	"Maximum upload rate (e.g. 1M)"
 //	@Param		max-ratio	formData	number	false	"Stop uploading at N × torrent size (0 = unlimited)"
 //	@Success	202	{object}	uploadResult
@@ -267,13 +269,13 @@ func (s *server) uploadTorrent(w http.ResponseWriter, r *http.Request) {
 	// Per-upload overrides are optional. When supplied, persist them in a
 	// state file next to the .torrent so the watcher's AddFile picks them
 	// up — and they survive a restart.
-	min, max, ratio, override, err := parseSpeedForm(r, s.defMin, s.defMax)
+	max, ratio, override, err := parseSpeedForm(r, s.defMax)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if override {
-		if err := seeder.SaveStateFile(target, min, max, ratio, time.Now().UnixMilli(), 0, false); err != nil {
+		if err := seeder.SaveStateFile(target, max, ratio, time.Now().UnixMilli(), 0, false); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not save state file")
 			return
 		}
@@ -293,41 +295,31 @@ func (s *server) uploadTorrent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, res)
 }
 
-// parseSpeedForm pulls optional min-speed / max-speed / max-ratio values from
-// a multipart form, falling back to defMin/defMax (ratio defaults to 0 =
-// unlimited). override is true when at least one of the three was explicitly
-// provided by the client.
-func parseSpeedForm(r *http.Request, defMin, defMax uint64) (min, max uint64, ratio float64, override bool, err error) {
-	min, max = defMin, defMax
-	if v := r.FormValue("min-speed"); v != "" {
-		if min, err = units.ParseRate(v); err != nil {
-			return 0, 0, 0, false, fmt.Errorf("min-speed: %w", err)
-		}
-		override = true
-	}
+// parseSpeedForm pulls optional max-speed / max-ratio values from a multipart
+// form, falling back to defMax (ratio defaults to 0 = unlimited). override is
+// true when at least one was explicitly provided by the client.
+func parseSpeedForm(r *http.Request, defMax uint64) (max uint64, ratio float64, override bool, err error) {
+	max = defMax
 	if v := r.FormValue("max-speed"); v != "" {
 		if max, err = units.ParseRate(v); err != nil {
-			return 0, 0, 0, false, fmt.Errorf("max-speed: %w", err)
+			return 0, 0, false, fmt.Errorf("max-speed: %w", err)
 		}
 		override = true
 	}
 	if v := r.FormValue("max-ratio"); v != "" {
 		if ratio, err = strconv.ParseFloat(v, 64); err != nil {
-			return 0, 0, 0, false, fmt.Errorf("max-ratio: %w", err)
+			return 0, 0, false, fmt.Errorf("max-ratio: %w", err)
 		}
 		if ratio < 0 {
-			return 0, 0, 0, false, fmt.Errorf("max-ratio must be non-negative")
+			return 0, 0, false, fmt.Errorf("max-ratio must be non-negative")
 		}
 		override = true
 	}
-	if min > max {
-		return 0, 0, 0, false, fmt.Errorf("min-speed exceeds max-speed")
-	}
-	return min, max, ratio, override, nil
+	return max, ratio, override, nil
 }
 
-// updateTorrent edits a live torrent's min/max upload rate. JSON body:
-// {"minSpeed": "200K", "maxSpeed": "2M"}. Only the owner (or admin) may change
+// updateTorrent edits a live torrent's max upload rate and ratio cap. JSON
+// body: {"maxSpeed": "2M", "maxRatio": 0}. Only the owner (or admin) may change
 // a torrent; the change is persisted to a state file next to the .torrent.
 //
 //	@Summary	Update torrent upload speed
@@ -353,23 +345,74 @@ func (s *server) updateTorrent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	min, err := units.ParseRate(body.MinSpeed)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "min-speed: "+err.Error())
-		return
-	}
 	max, err := units.ParseRate(body.MaxSpeed)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "max-speed: "+err.Error())
 		return
 	}
-	if err := s.mgr.SetClientOptions(id, min, max, body.MaxRatio, body.DeleteOnCap); err != nil {
+	if err := s.mgr.SetClientOptions(id, max, body.MaxRatio, body.DeleteOnCap); err != nil {
 		if errors.Is(err, seeder.ErrNotFound) {
 			writeError(w, http.StatusNotFound, err.Error())
 		} else {
 			writeError(w, http.StatusBadRequest, err.Error())
 		}
 		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// getBandwidth returns the caller's own upload-bandwidth ceiling and the server
+// default. The owner key is the caller's storage scope (their username, or the
+// root "" bucket when auth is disabled).
+//
+//	@Summary	Get my upload bandwidth
+//	@Tags		bandwidth
+//	@Produce	json
+//	@Success	200	{object}	bandwidthInfo
+//	@Router		/api/bandwidth [get]
+func (s *server) getBandwidth(w http.ResponseWriter, r *http.Request) {
+	owner := s.uploader(r)
+	writeJSON(w, http.StatusOK, bandwidthInfo{
+		Bandwidth: s.mgr.Bandwidth(owner),
+		Default:   s.mgr.DefaultBandwidth(),
+		Profile:   s.mgr.Profile(owner),
+	})
+}
+
+// setMyBandwidth sets the caller's own upload-bandwidth ceiling.
+//
+//	@Summary	Set my upload bandwidth
+//	@Tags		bandwidth
+//	@Accept		json
+//	@Param		body	body	bandwidthUpdate	true	"Bandwidth (e.g. 2M)"
+//	@Success	204
+//	@Failure	400	{object}	errorResponse
+//	@Router		/api/bandwidth [put]
+func (s *server) setMyBandwidth(w http.ResponseWriter, r *http.Request) {
+	s.applyBandwidth(w, r, s.uploader(r))
+}
+
+// applyBandwidth decodes a bandwidthUpdate body and stores it for owner.
+func (s *server) applyBandwidth(w http.ResponseWriter, r *http.Request, owner string) {
+	var body bandwidthUpdate
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	v, err := units.ParseRate(body.Bandwidth)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bandwidth: "+err.Error())
+		return
+	}
+	if err := s.mgr.SetBandwidth(owner, v); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Profile != "" {
+		if err := s.mgr.SetProfile(owner, body.Profile); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

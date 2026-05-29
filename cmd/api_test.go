@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jdel/emission/internal/client"
+	"github.com/jdel/emission/internal/seeder"
 )
 
 func TestSafeTargetPath(t *testing.T) {
@@ -15,11 +19,11 @@ func TestSafeTargetPath(t *testing.T) {
 	s := &server{torrentsDir: dir}
 
 	cases := []struct {
-		name        string
-		username    string
-		filename    string
-		wantErr     bool
-		wantSuffix  string // checked when wantErr is false; relative to dir
+		name       string
+		username   string
+		filename   string
+		wantErr    bool
+		wantSuffix string // checked when wantErr is false; relative to dir
 	}{
 		{"root happy", "", "ok.torrent", false, "ok.torrent"},
 		{"user happy", "alice", "ok.torrent", false, filepath.Join("alice", "ok.torrent")},
@@ -55,6 +59,61 @@ func TestSafeTargetPath(t *testing.T) {
 	}
 }
 
+func TestBandwidthEndpoints(t *testing.T) {
+	c, err := client.New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<20) // 1M default
+	t.Cleanup(mgr.Shutdown)
+	srv := &server{mgr: mgr, torrentsDir: t.TempDir()} // auth nil → owner ""
+
+	// GET own → default.
+	rec := httptest.NewRecorder()
+	srv.getBandwidth(rec, httptest.NewRequest(http.MethodGet, "/api/bandwidth", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET code %d", rec.Code)
+	}
+	var info bandwidthInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.Bandwidth != 1<<20 || info.Default != 1<<20 {
+		t.Errorf("info = %+v, want bandwidth/default 1<<20", info)
+	}
+
+	if info.Profile != "normal" {
+		t.Errorf("default profile = %q, want normal", info.Profile)
+	}
+
+	// PUT own → 2M + aggressive profile.
+	rec = httptest.NewRecorder()
+	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"2M","profile":"aggressive"}`)))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("PUT code %d body %s", rec.Code, rec.Body)
+	}
+	if got := mgr.Bandwidth(""); got != 2<<20 {
+		t.Errorf("after PUT, bandwidth = %d, want 2<<20", got)
+	}
+	if got := mgr.Profile(""); got != "aggressive" {
+		t.Errorf("after PUT, profile = %q, want aggressive", got)
+	}
+
+	// PUT invalid value → 400.
+	rec = httptest.NewRecorder()
+	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"abc"}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad value code %d, want 400", rec.Code)
+	}
+
+	// PUT invalid profile → 400.
+	rec = httptest.NewRecorder()
+	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"2M","profile":"bogus"}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad profile code %d, want 400", rec.Code)
+	}
+}
+
 func TestQueryInt(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/x?limit=42&bad=oops", nil)
 	if got := queryInt(r, "limit", 0); got != 42 {
@@ -86,12 +145,12 @@ func buildMultipart(t *testing.T, fields map[string]string) (*http.Request, stri
 
 func TestParseSpeedFormDefaults(t *testing.T) {
 	r, _ := buildMultipart(t, nil)
-	min, max, ratio, override, err := parseSpeedForm(r, 100, 500)
+	max, ratio, override, err := parseSpeedForm(r, 500)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != 100 || max != 500 || ratio != 0 {
-		t.Errorf("got %d/%d ratio=%v", min, max, ratio)
+	if max != 500 || ratio != 0 {
+		t.Errorf("got max=%d ratio=%v", max, ratio)
 	}
 	if override {
 		t.Error("override should be false when no fields supplied")
@@ -100,16 +159,15 @@ func TestParseSpeedFormDefaults(t *testing.T) {
 
 func TestParseSpeedFormOverride(t *testing.T) {
 	r, _ := buildMultipart(t, map[string]string{
-		"min-speed": "200K",
 		"max-speed": "1M",
 		"max-ratio": "2.5",
 	})
-	min, max, ratio, override, err := parseSpeedForm(r, 0, 0)
+	max, ratio, override, err := parseSpeedForm(r, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != 200*1024 || max != 1<<20 {
-		t.Errorf("speeds = %d/%d", min, max)
+	if max != 1<<20 {
+		t.Errorf("max = %d", max)
 	}
 	if ratio != 2.5 {
 		t.Errorf("ratio = %v", ratio)
@@ -193,16 +251,14 @@ func TestParseSpeedFormValidation(t *testing.T) {
 		fields map[string]string
 		want   string
 	}{
-		{"bad min", map[string]string{"min-speed": "abc"}, "min-speed"},
 		{"bad max", map[string]string{"max-speed": "abc"}, "max-speed"},
 		{"bad ratio", map[string]string{"max-ratio": "abc"}, "max-ratio"},
 		{"negative ratio", map[string]string{"max-ratio": "-1"}, "non-negative"},
-		{"min exceeds max", map[string]string{"min-speed": "1M", "max-speed": "100K"}, "exceeds"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r, _ := buildMultipart(t, c.fields)
-			_, _, _, _, err := parseSpeedForm(r, 100, 500)
+			_, _, _, err := parseSpeedForm(r, 500)
 			if err == nil {
 				t.Fatalf("expected error containing %q, got nil", c.want)
 			}

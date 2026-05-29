@@ -78,7 +78,6 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [speedOpen, setSpeedOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [minInput, setMinInput] = useState('')
   const [maxInput, setMaxInput] = useState('')
   const [ratioInput, setRatioInput] = useState('')
   const [deleteOnCapInput, setDeleteOnCapInput] = useState(false)
@@ -87,7 +86,6 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
   const smoothRate = useLerpValue(torrent.rateBytesPerSec)
 
   function openSpeedDialog() {
-    setMinInput(formatRateInput(torrent.minRateBytesPerSec))
     setMaxInput(formatRateInput(torrent.maxRateBytesPerSec))
     setRatioInput(String(torrent.maxRatio ?? 0))
     setDeleteOnCapInput(torrent.deleteOnCap)
@@ -102,7 +100,7 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
     }
     setSaving(true)
     try {
-      await setClientOptions(torrent.id, minInput.trim(), maxInput.trim(), ratio, deleteOnCapInput)
+      await setClientOptions(torrent.id, maxInput.trim(), ratio, deleteOnCapInput)
       toast.success('Updated')
       setSpeedOpen(false)
     } catch (e) {
@@ -125,31 +123,17 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
   const editDialog = (
     <Dialog open={speedOpen} onOpenChange={setSpeedOpen}>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit settings</DialogTitle>
-          <DialogDescription className="font-medium text-foreground/80">
+        <DialogHeader className="min-w-0">
+          <DialogTitle className="truncate">Edit settings</DialogTitle>
+          <DialogDescription className="truncate font-medium text-foreground/80" title={torrent.name}>
             {torrent.name}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={(e) => { e.preventDefault(); void onSaveSpeed() }}>
           <div className="grid gap-3 py-2">
             <div className="grid gap-1.5">
-              <Label htmlFor={`min-${torrent.id}`}>
-                Minimum{' '}
-                <span className="text-muted-foreground font-normal">e.g. 200K, 1.5M</span>
-              </Label>
-              <Input
-                id={`min-${torrent.id}`}
-                value={minInput}
-                onChange={(e) => setMinInput(e.target.value)}
-                placeholder="e.g. 200K"
-                autoComplete="off"
-                autoFocus
-              />
-            </div>
-            <div className="grid gap-1.5">
               <Label htmlFor={`max-${torrent.id}`}>
-                Maximum{' '}
+                Maximum upload rate{' '}
                 <span className="text-muted-foreground font-normal">e.g. 1M</span>
               </Label>
               <Input
@@ -158,6 +142,7 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
                 onChange={(e) => setMaxInput(e.target.value)}
                 placeholder="e.g. 1M"
                 autoComplete="off"
+                autoFocus
               />
             </div>
             <div className="grid gap-1.5">

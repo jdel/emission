@@ -41,6 +41,7 @@ type session struct {
 	meta     *torrent.Meta
 	path     string // absolute path of the backing .torrent file
 	addedAt  time.Time
+	owner    string         // top-level storage dir; "" = root / auth-off
 	client   *client.Client // owner-scoped identity; not shared across users
 	mgr      *Manager
 	ctx      context.Context
@@ -52,7 +53,6 @@ type session struct {
 	maxRatio float64
 
 	// --- Atomic: read by goroutines, written by SetClientOptions ---
-	minSpeed    atomic.Uint64
 	maxSpeed    atomic.Uint64
 	uploaded    atomic.Uint64 // bytes uploaded this session
 	rate        atomic.Uint64 // current simulated rate, bytes/sec
@@ -79,26 +79,28 @@ type trackerState struct {
 	trackerID      atomic.Value // string; empty until the tracker issues one
 }
 
-func newSession(parent context.Context, id string, meta *torrent.Meta, path string, minSpeed, maxSpeed uint64, maxRatio float64, addedAt time.Time, cl *client.Client, m *Manager) *session {
+func newSession(parent context.Context, id string, meta *torrent.Meta, path string, maxSpeed uint64, maxRatio float64, addedAt time.Time, owner string, cl *client.Client, m *Manager) *session {
 	ctx, cancel := context.WithCancel(parent)
 	s := &session{
 		id:       id,
 		meta:     meta,
 		path:     path,
 		addedAt:  addedAt,
+		owner:    owner,
 		client:   cl,
 		mgr:      m,
 		ctx:      ctx,
 		cancel:   cancel,
 		maxRatio: maxRatio,
 	}
-	s.minSpeed.Store(minSpeed)
 	s.maxSpeed.Store(maxSpeed)
 	s.uploadCap.Store(uploadCapFor(meta.Length, maxRatio))
 	for _, u := range meta.AnnounceURLs {
 		s.trackers = append(s.trackers, &trackerState{url: u})
 	}
-	s.rate.Store(pickRateWeighted(minSpeed, maxSpeed, 0))
+	// No leechers are known until the first announce, so start at zero; the
+	// rate loop sets a real value on its first tick.
+	s.rate.Store(0)
 	return s
 }
 
@@ -132,8 +134,10 @@ func (s *session) run() {
 	log.Info().Str("name", s.meta.Name).Str("uploaded", units.FormatBytes(s.uploaded.Load())).Msg("stopped")
 }
 
-// pickRateLoop refreshes the simulated upload rate every rateRefresh, using a
-// leecher-weighted pick, and records a stats data point on each tick.
+// pickRateLoop refreshes the simulated upload rate every rateRefresh and records
+// a stats data point on each tick. The rate scales with this torrent's leecher
+// count up to its max, then the owner's bandwidth ceiling caps the sum across
+// all their torrents (see Manager.cappedRate).
 func (s *session) pickRateLoop() {
 	t := time.NewTicker(rateRefresh)
 	defer t.Stop()
@@ -147,7 +151,10 @@ func (s *session) pickRateLoop() {
 				leechers += ts.leechers.Load()
 			}
 			if leechers > 0 {
-				s.rate.Store(pickRateWeighted(s.minSpeed.Load(), s.maxSpeed.Load(), leechers))
+				bw := s.mgr.settings.bandwidth(s.owner)
+				k := s.mgr.settings.profileK(s.owner)
+				natural := naturalRate(s.maxSpeed.Load(), bw, leechers, k)
+				s.rate.Store(s.mgr.cappedRate(s.owner, natural))
 			} else {
 				s.rate.Store(0)
 			}
@@ -319,7 +326,6 @@ func (s *session) runTracker(ts *trackerState) {
 // Called after each tracker announce so uploaded bytes survive restarts.
 func (s *session) saveStateFile() {
 	_ = SaveStateFile(s.path,
-		s.minSpeed.Load(),
 		s.maxSpeed.Load(),
 		s.maxRatio,
 		s.addedAt.UnixMilli(),
@@ -360,7 +366,6 @@ func (s *session) status() Status {
 		SizeBytes:          s.meta.Length,
 		UploadedBytes:      uploaded,
 		RateBytesPerSec:    rate,
-		MinRateBytesPerSec: s.minSpeed.Load(),
 		MaxRateBytesPerSec: s.maxSpeed.Load(),
 		MaxRatio:           s.maxRatio,
 		Capped:             capped,
@@ -423,17 +428,27 @@ func logAnnounce(name, url string, ev tracker.Event, resp *tracker.Response, err
 // pickRateWeighted selects a rate in [min, max] biased toward higher values
 // when leechers is large using a hyperbolic weight w = L/(L+k), k=3.33.
 // At 10 leechers w≈0.75; as leechers→∞ w→1.
-func pickRateWeighted(min, max uint64, leechers int64) uint64 {
+func pickRateWeighted(min, max uint64, leechers int64, k float64) uint64 {
 	if max <= min {
 		return min
 	}
-	const k = 3.33
 	l := float64(leechers)
 	if l < 0 {
 		l = 0
 	}
 	w := l / (l + k)
 	return uint64(float64(min) + w*float64(max-min))
+}
+
+// naturalRate is the un-capped target rate for one torrent: leecher-weighted up
+// to the lesser of its own maxSpeed and the owner's total bandwidth — a single
+// torrent can never target more than the user's whole pipe. The per-user
+// proportional cap (Manager.cappedRate) still applies across multiple torrents.
+func naturalRate(maxSpeed, bandwidth uint64, leechers int64, k float64) uint64 {
+	if bandwidth < maxSpeed {
+		maxSpeed = bandwidth
+	}
+	return pickRateWeighted(0, maxSpeed, leechers, k)
 }
 
 func minInterval(resp *tracker.Response) time.Duration {

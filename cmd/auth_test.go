@@ -30,7 +30,7 @@ func newAuthServer(t *testing.T) (*server, *auth.Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mgr := seeder.New(c, t.TempDir(), 0, false)
+	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<30)
 	t.Cleanup(mgr.Shutdown)
 	srv := &server{
 		mgr:         mgr,

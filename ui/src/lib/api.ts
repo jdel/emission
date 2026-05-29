@@ -25,8 +25,7 @@ export interface Torrent {
   sizeBytes: number
   uploadedBytes: number
   rateBytesPerSec: number
-  minRateBytesPerSec: number // configured floor
-  maxRateBytesPerSec: number // configured ceiling
+  maxRateBytesPerSec: number // configured per-torrent ceiling
   maxRatio: number // upload cap as N × torrent size; 0 = unlimited
   capped: boolean // true when ratio cap has been reached
   deleteOnCap: boolean // remove the torrent automatically when capped
@@ -52,7 +51,6 @@ export interface ListParams {
 }
 
 export interface UploadOptions {
-  minSpeed?: string
   maxSpeed?: string
   maxRatio?: number
 }
@@ -97,7 +95,6 @@ export async function uploadTorrent(
 ): Promise<UploadResult> {
   const form = new FormData()
   form.append('file', file)
-  if (opts.minSpeed) form.append('min-speed', opts.minSpeed)
   if (opts.maxSpeed) form.append('max-speed', opts.maxSpeed)
   if (opts.maxRatio !== undefined) form.append('max-ratio', String(opts.maxRatio))
   const res = await request('/torrents', { method: 'POST', body: form })
@@ -110,14 +107,13 @@ export async function removeTorrent(id: string): Promise<void> {
 }
 
 /**
- * setClientOptions updates a torrent's per-client overrides: min/max upload
- * rate (human-readable strings, e.g. "200K", "1.5M") and ratio cap (multiple
- * of torrent size; 0 = unlimited / seed indefinitely). The change persists
- * via a state file next to the .torrent.
+ * setClientOptions updates a torrent's per-client overrides: max upload rate
+ * (human-readable string, e.g. "1.5M") and ratio cap (multiple of torrent
+ * size; 0 = unlimited / seed indefinitely). The change persists via a state
+ * file next to the .torrent.
  */
 export async function setClientOptions(
   id: string,
-  minSpeed: string,
   maxSpeed: string,
   maxRatio: number,
   deleteOnCap: boolean,
@@ -125,7 +121,46 @@ export async function setClientOptions(
   await request(`/torrents/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ minSpeed, maxSpeed, maxRatio, deleteOnCap }),
+    body: JSON.stringify({ maxSpeed, maxRatio, deleteOnCap }),
+  })
+}
+
+// --- per-user upload bandwidth ---------------------------------------------
+
+/** SeedingProfile sets how steeply the rate ramps with leecher count. */
+export type SeedingProfile = 'stealth' | 'normal' | 'aggressive'
+
+export interface BandwidthInfo {
+  bandwidth: number // bytes/sec
+  default: number // server default, bytes/sec
+  profile: SeedingProfile
+}
+
+/** getBandwidth returns the current user's own bandwidth ceiling and profile. */
+export async function getBandwidth(): Promise<BandwidthInfo> {
+  const res = await request('/bandwidth')
+  return (await res.json()) as BandwidthInfo
+}
+
+/** setBandwidth sets the current user's own bandwidth (e.g. "2M") and profile. */
+export async function setBandwidth(bandwidth: string, profile?: SeedingProfile): Promise<void> {
+  await request('/bandwidth', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bandwidth, profile }),
+  })
+}
+
+/** setUserBandwidth sets any user's bandwidth and profile (admin only). */
+export async function setUserBandwidth(
+  username: string,
+  bandwidth: string,
+  profile?: SeedingProfile,
+): Promise<void> {
+  await request(`/auth/users/${encodeURIComponent(username)}/bandwidth`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bandwidth, profile }),
   })
 }
 
@@ -210,6 +245,8 @@ export interface Device {
   username: string
   invitedBy?: string // who created the invite that enrolled this device
   addedAt: number // unix ms
+  bandwidth: number // this user's upload ceiling, bytes/sec
+  profile: SeedingProfile // this user's seeding profile
 }
 
 /** listMyDevices returns the current user's own registered passkeys. */

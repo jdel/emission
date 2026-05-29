@@ -1,3 +1,4 @@
+basePath: /
 definitions:
   cmd.authResult:
     properties:
@@ -12,20 +13,45 @@ definitions:
         type: boolean
       bootstrapAvailable:
         type: boolean
-      deviceCount:
-        type: integer
       username:
+        type: string
+    type: object
+  cmd.bandwidthInfo:
+    properties:
+      bandwidth:
+        description: bytes/sec
+        type: integer
+      default:
+        description: server default, bytes/sec
+        type: integer
+      profile:
+        description: 'seeding profile: stealth|normal|aggressive'
+        type: string
+    type: object
+  cmd.bandwidthUpdate:
+    properties:
+      bandwidth:
+        description: e.g. "2M"
+        type: string
+      profile:
+        description: stealth|normal|aggressive
         type: string
     type: object
   cmd.deviceInfo:
     properties:
       addedAt:
         type: integer
+      bandwidth:
+        description: this user's upload ceiling, bytes/sec
+        type: integer
       id:
         description: base64url credential id
         type: string
       invitedBy:
         description: empty for the bootstrap admin
+        type: string
+      profile:
+        description: this user's seeding profile
         type: string
       username:
         type: string
@@ -97,14 +123,15 @@ definitions:
         type: number
       maxSpeed:
         type: string
-      minSpeed:
-        type: string
     type: object
   cmd.uploadResult:
     properties:
       id:
         type: string
       name:
+        type: string
+      notice:
+        description: set when tracker URLs were truncated
         type: string
     type: object
   protocol.AttestationFormat:
@@ -425,9 +452,6 @@ definitions:
       maxRatio:
         description: upload cap as a multiple of torrent size (0 = unlimited)
         type: number
-      minRateBytesPerSec:
-        description: configured floor
-        type: integer
       name:
         description: torrent display name
         type: string
@@ -505,6 +529,9 @@ definitions:
     - AlgRS1
 info:
   contact: {}
+  description: Spoof BitTorrent tracker announces to boost your ratio.
+  title: emission API
+  version: "1.0"
 paths:
   /api/auth/credentials/{id}:
     delete:
@@ -741,6 +768,68 @@ paths:
       summary: Remove a user and their torrents (admin only)
       tags:
       - admin
+  /api/auth/users/{username}/bandwidth:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      - description: Bandwidth (e.g. 2M)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/cmd.bandwidthUpdate'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+      summary: Set a user's upload bandwidth (admin only)
+      tags:
+      - admin
+  /api/bandwidth:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.bandwidthInfo'
+      summary: Get my upload bandwidth
+      tags:
+      - bandwidth
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bandwidth (e.g. 2M)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/cmd.bandwidthUpdate'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/cmd.errorResponse'
+      summary: Set my upload bandwidth
+      tags:
+      - bandwidth
   /api/torrents:
     get:
       parameters:
@@ -775,10 +864,6 @@ paths:
         name: file
         required: true
         type: file
-      - description: Minimum upload rate (e.g. 200K)
-        in: formData
-        name: min-speed
-        type: string
       - description: Maximum upload rate (e.g. 1M)
         in: formData
         name: max-speed

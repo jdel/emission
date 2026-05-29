@@ -36,10 +36,23 @@ type uploadResult struct {
 
 // speedUpdate is the PATCH /api/torrents/{id} request body.
 type speedUpdate struct {
-	MinSpeed    string  `json:"minSpeed"`
 	MaxSpeed    string  `json:"maxSpeed"`
 	MaxRatio    float64 `json:"maxRatio"`
 	DeleteOnCap bool    `json:"deleteOnCap"`
+}
+
+// bandwidthInfo is the GET /api/bandwidth response (the caller's own settings).
+type bandwidthInfo struct {
+	Bandwidth uint64 `json:"bandwidth"` // bytes/sec
+	Default   uint64 `json:"default"`   // server default, bytes/sec
+	Profile   string `json:"profile"`   // seeding profile: stealth|normal|aggressive
+}
+
+// bandwidthUpdate is the PUT /api/bandwidth and admin set-bandwidth request
+// body. Profile is optional; when empty the seeding profile is left unchanged.
+type bandwidthUpdate struct {
+	Bandwidth string `json:"bandwidth"`         // e.g. "2M"
+	Profile   string `json:"profile,omitempty"` // stealth|normal|aggressive
 }
 
 // errorResponse is the body shape every non-2xx handler returns.
@@ -77,6 +90,8 @@ type deviceInfo struct {
 	Username  string `json:"username"`
 	InvitedBy string `json:"invitedBy,omitempty"` // empty for the bootstrap admin
 	AddedAt   int64  `json:"addedAt"`
+	Bandwidth uint64 `json:"bandwidth"` // this user's upload ceiling, bytes/sec
+	Profile   string `json:"profile"`   // this user's seeding profile
 }
 
 // registerChallenge is the POST /api/auth/register/begin response.

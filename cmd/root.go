@@ -41,8 +41,8 @@ func RootCmd() *cobra.Command {
 	// Flags shared by seed and serve — defined once here so viper binds a single flag object.
 	cmd.PersistentFlags().String("storage.torrents", "", "directory of .torrent files to watch (default: XDG data dir)")
 	cmd.PersistentFlags().String("client.name", "transmission-4.0.6", "client profile to impersonate")
-	cmd.PersistentFlags().String("client.min-speed", "50K", "minimum simulated upload rate")
-	cmd.PersistentFlags().String("client.max-speed", "500K", "maximum simulated upload rate")
+	cmd.PersistentFlags().String("client.max-speed", "500K", "maximum simulated upload rate per torrent")
+	cmd.PersistentFlags().String("client.bandwidth", "1M", "default per-user upload bandwidth ceiling, shared across that user's torrents by leecher share")
 	cmd.PersistentFlags().Int("client.max-peers", 0, "peers to request from each tracker (0 = client default)")
 	cmd.PersistentFlags().Float64("client.max-ratio", 0, "stop accumulating upload once uploaded reaches N × torrent size (0 = unlimited)")
 	cmd.PersistentFlags().Bool("client.autoremove", false, "automatically remove the torrent when the ratio cap is reached")
@@ -50,7 +50,7 @@ func RootCmd() *cobra.Command {
 	for _, name := range []string{
 		"config", "log-level",
 		"storage.torrents",
-		"client.name", "client.min-speed", "client.max-speed", "client.max-peers", "client.max-ratio",
+		"client.name", "client.max-speed", "client.bandwidth", "client.max-peers", "client.max-ratio",
 		"client.autoremove",
 	} {
 		_ = viper.BindPFlag(name, cmd.PersistentFlags().Lookup(name))

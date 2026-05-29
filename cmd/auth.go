@@ -191,9 +191,11 @@ func (s *server) authMe(w http.ResponseWriter, r *http.Request) {
 	for _, c := range s.auth.Credentials() {
 		if c.Username == username {
 			out = append(out, deviceInfo{
-				ID:      base64.RawURLEncoding.EncodeToString(c.Credential.ID),
-				Username: c.Username,
-				AddedAt: c.AddedAt,
+				ID:        base64.RawURLEncoding.EncodeToString(c.Credential.ID),
+				Username:  c.Username,
+				AddedAt:   c.AddedAt,
+				Bandwidth: s.mgr.Bandwidth(username),
+				Profile:   s.mgr.Profile(username),
 			})
 		}
 	}
@@ -288,9 +290,35 @@ func (s *server) authUsers(w http.ResponseWriter, r *http.Request) {
 			Username:  c.Username,
 			InvitedBy: c.InvitedBy,
 			AddedAt:   c.AddedAt,
+			Bandwidth: s.mgr.Bandwidth(c.Username),
+			Profile:   s.mgr.Profile(c.Username),
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// setUserBandwidth sets any user's upload-bandwidth ceiling (admin only).
+//
+//	@Summary	Set a user's upload bandwidth (admin only)
+//	@Tags		admin
+//	@Accept		json
+//	@Param		username	path	string			true	"Username"
+//	@Param		body		body	bandwidthUpdate	true	"Bandwidth (e.g. 2M)"
+//	@Success	204
+//	@Failure	400	{object}	errorResponse
+//	@Failure	403	{object}	errorResponse
+//	@Router		/api/auth/users/{username}/bandwidth [put]
+func (s *server) setUserBandwidth(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		writeError(w, http.StatusForbidden, "admin only")
+		return
+	}
+	username := r.PathValue("username")
+	if !usernameRe.MatchString(username) {
+		writeError(w, http.StatusBadRequest, "invalid username")
+		return
+	}
+	s.applyBandwidth(w, r, username)
 }
 
 // authRemoveCredential deletes a single passkey. The admin's own device is

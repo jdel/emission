@@ -383,6 +383,102 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/auth/users/{username}/bandwidth": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Set a user's upload bandwidth (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username",
+                        "name": "username",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Bandwidth (e.g. 2M)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cmd.bandwidthUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/cmd.errorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/cmd.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/bandwidth": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bandwidth"
+                ],
+                "summary": "Get my upload bandwidth",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/cmd.bandwidthInfo"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bandwidth"
+                ],
+                "summary": "Set my upload bandwidth",
+                "parameters": [
+                    {
+                        "description": "Bandwidth (e.g. 2M)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/cmd.bandwidthUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/cmd.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/torrents": {
             "get": {
                 "produces": [
@@ -439,12 +535,6 @@ const docTemplate = `{
                         "name": "file",
                         "in": "formData",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Minimum upload rate (e.g. 200K)",
-                        "name": "min-speed",
-                        "in": "formData"
                     },
                     {
                         "type": "string",
@@ -633,10 +723,44 @@ const docTemplate = `{
                 }
             }
         },
+        "cmd.bandwidthInfo": {
+            "type": "object",
+            "properties": {
+                "bandwidth": {
+                    "description": "bytes/sec",
+                    "type": "integer"
+                },
+                "default": {
+                    "description": "server default, bytes/sec",
+                    "type": "integer"
+                },
+                "profile": {
+                    "description": "seeding profile: stealth|normal|aggressive",
+                    "type": "string"
+                }
+            }
+        },
+        "cmd.bandwidthUpdate": {
+            "type": "object",
+            "properties": {
+                "bandwidth": {
+                    "description": "e.g. \"2M\"",
+                    "type": "string"
+                },
+                "profile": {
+                    "description": "stealth|normal|aggressive",
+                    "type": "string"
+                }
+            }
+        },
         "cmd.deviceInfo": {
             "type": "object",
             "properties": {
                 "addedAt": {
+                    "type": "integer"
+                },
+                "bandwidth": {
+                    "description": "this user's upload ceiling, bytes/sec",
                     "type": "integer"
                 },
                 "id": {
@@ -645,6 +769,10 @@ const docTemplate = `{
                 },
                 "invitedBy": {
                     "description": "empty for the bootstrap admin",
+                    "type": "string"
+                },
+                "profile": {
+                    "description": "this user's seeding profile",
                     "type": "string"
                 },
                 "username": {
@@ -755,9 +883,6 @@ const docTemplate = `{
                 },
                 "maxSpeed": {
                     "type": "string"
-                },
-                "minSpeed": {
-                    "type": "string"
                 }
             }
         },
@@ -768,6 +893,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "notice": {
+                    "description": "set when tracker URLs were truncated",
                     "type": "string"
                 }
             }
@@ -1175,10 +1304,6 @@ const docTemplate = `{
                     "description": "upload cap as a multiple of torrent size (0 = unlimited)",
                     "type": "number"
                 },
-                "minRateBytesPerSec": {
-                    "description": "configured floor",
-                    "type": "integer"
-                },
                 "name": {
                     "description": "torrent display name",
                     "type": "string"
@@ -1278,12 +1403,12 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
+	Version:          "1.0",
 	Host:             "",
-	BasePath:         "",
+	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "",
-	Description:      "",
+	Title:            "emission API",
+	Description:      "Spoof BitTorrent tracker announces to boost your ratio.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

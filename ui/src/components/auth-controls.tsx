@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
-import { ArrowLeft, LogOut, Plus, Smartphone, Trash2, Users, UserPlus } from 'lucide-react'
+import { ArrowLeft, Gauge, LogOut, Plus, Smartphone, Trash2, Users, UserPlus } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 
@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { formatRelative } from '@/lib/format'
 import { ConfirmDialog, type ConfirmDialogProps } from '@/components/confirm-dialog'
 import { ManageUsers } from '@/components/manage-users'
+import { BandwidthDialog } from '@/components/bandwidth-dialog'
 
 // ---------------------------------------------------------------------------
 // MyDevices — self-service device management for non-admin users
@@ -211,6 +212,7 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
     const [busy, setBusy] = useState(false)
     const [manageOpen, setManageOpen] = useState(false)
     const [myDevicesOpen, setMyDevicesOpen] = useState(false)
+    const [myBandwidthOpen, setMyBandwidthOpen] = useState(false)
     const [isSelf, setIsSelf] = useState(false)
 
     const isAdmin = username === ADMIN_USERNAME
@@ -284,11 +286,21 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
             <Users />
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="My bandwidth"
+          disabled={!username}
+          onClick={() => setMyBandwidthOpen(true)}
+        >
+          <Gauge />
+        </Button>
         <Button variant="ghost" size="icon" aria-label="Sign out" onClick={signOut}>
           <LogOut />
         </Button>
 
         <ManageUsers open={manageOpen} onOpenChange={setManageOpen} />
+        <BandwidthDialog open={myBandwidthOpen} onOpenChange={setMyBandwidthOpen} />
         {username && !isAdmin && (
           <MyDevices
             username={username}

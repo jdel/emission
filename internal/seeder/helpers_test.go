@@ -16,8 +16,8 @@ func TestUploadCapFor(t *testing.T) {
 		{1024, 0, 0},      // 0 ratio → unlimited
 		{1024, 1.0, 1024}, // exact size
 		{1024, 2.5, 2560},
-		{0, 2.0, 0},      // 0 size → unlimited
-		{1024, -1.0, 0},  // negative ratio → unlimited (defensive)
+		{0, 2.0, 0},     // 0 size → unlimited
+		{1024, -1.0, 0}, // negative ratio → unlimited (defensive)
 	}
 	for _, c := range cases {
 		if got := uploadCapFor(c.size, c.ratio); got != c.want {
@@ -27,34 +27,35 @@ func TestUploadCapFor(t *testing.T) {
 }
 
 func TestPickRateWeighted(t *testing.T) {
+	const k = 3.33
 	// equal bounds → always returns min regardless of leechers
-	if got := pickRateWeighted(100, 100, 0); got != 100 {
+	if got := pickRateWeighted(100, 100, 0, k); got != 100 {
 		t.Errorf("equal bounds (0 leechers): got %d, want 100", got)
 	}
-	if got := pickRateWeighted(100, 100, 10); got != 100 {
+	if got := pickRateWeighted(100, 100, 10, k); got != 100 {
 		t.Errorf("equal bounds (10 leechers): got %d, want 100", got)
 	}
 	// result always stays within [min, max]
 	for i := 0; i < 200; i++ {
 		for _, leechers := range []int64{0, 1, 10, 1000} {
-			got := pickRateWeighted(100, 200, leechers)
+			got := pickRateWeighted(100, 200, leechers, k)
 			if got < 100 || got > 200 {
 				t.Errorf("leechers=%d: out of range [100,200]: %d", leechers, got)
 			}
 		}
 	}
 	// negative leechers treated as 0 — no panic
-	_ = pickRateWeighted(100, 200, -5)
+	_ = pickRateWeighted(100, 200, -5, k)
 }
 
 func TestBackoff(t *testing.T) {
 	cases := []struct {
 		in, want time.Duration
 	}{
-		{time.Second, 30 * time.Second},       // raised to floor
-		{time.Minute, 2 * time.Minute},        // doubled
-		{20 * time.Minute, 30 * time.Minute},  // capped
-		{2 * time.Hour, 30 * time.Minute},     // way above cap
+		{time.Second, 30 * time.Second},      // raised to floor
+		{time.Minute, 2 * time.Minute},       // doubled
+		{20 * time.Minute, 30 * time.Minute}, // capped
+		{2 * time.Hour, 30 * time.Minute},    // way above cap
 	}
 	for _, c := range cases {
 		if got := backoff(c.in); got != c.want {

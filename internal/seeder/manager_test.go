@@ -48,7 +48,7 @@ func newTestManager(t *testing.T, dir string) *Manager {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := New(c, dir, 0, false)
+	m := New(c, dir, 0, false, 1<<30) // generous bandwidth: never the binding constraint here
 	t.Cleanup(m.Shutdown)
 	return m
 }
@@ -59,7 +59,7 @@ func TestManagerAddFileHappy(t *testing.T) {
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "alpha", srv.URL)
 
-	st, err := m.AddFile(path, 100, 500)
+	st, err := m.AddFile(path, 500)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +69,8 @@ func TestManagerAddFileHappy(t *testing.T) {
 	if st.SizeBytes != 1024 {
 		t.Errorf("size = %d, want 1024", st.SizeBytes)
 	}
-	if st.MinRateBytesPerSec != 100 || st.MaxRateBytesPerSec != 500 {
-		t.Errorf("speeds = %d/%d", st.MinRateBytesPerSec, st.MaxRateBytesPerSec)
+	if st.MaxRateBytesPerSec != 500 {
+		t.Errorf("max speed = %d, want 500", st.MaxRateBytesPerSec)
 	}
 	if !m.Exists(st.ID) {
 		t.Error("torrent missing after AddFile")
@@ -82,21 +82,11 @@ func TestManagerAddFileDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	if _, err := m.AddFile(path, 100, 500); err != nil {
+	if _, err := m.AddFile(path, 500); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.AddFile(path, 100, 500); err == nil {
+	if _, err := m.AddFile(path, 500); err == nil {
 		t.Error("duplicate AddFile should error")
-	}
-}
-
-func TestManagerAddFileMinExceedsMax(t *testing.T) {
-	srv := newTrackerServer(t)
-	dir := t.TempDir()
-	m := newTestManager(t, dir)
-	path := newTestTorrent(t, dir, "x", srv.URL)
-	if _, err := m.AddFile(path, 500, 100); err == nil {
-		t.Error("min > max should error")
 	}
 }
 
@@ -107,14 +97,14 @@ func TestManagerAddFileUsesStateFile(t *testing.T) {
 	path := newTestTorrent(t, dir, "x", srv.URL)
 
 	// Pre-write a state file with values different from the AddFile args.
-	if err := SaveStateFile(path, 100, 1024, 1.5, 0, 0, false); err != nil {
+	if err := SaveStateFile(path, 1024, 1.5, 0, 0, false); err != nil {
 		t.Fatal(err)
 	}
-	st, err := m.AddFile(path, 1, 2)
+	st, err := m.AddFile(path, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.MinRateBytesPerSec != 100 || st.MaxRateBytesPerSec != 1024 || st.MaxRatio != 1.5 {
+	if st.MaxRateBytesPerSec != 1024 || st.MaxRatio != 1.5 {
 		t.Errorf("state file not applied: %+v", st)
 	}
 }
@@ -124,17 +114,14 @@ func TestManagerSetClientOptions(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 100, 500)
+	st, _ := m.AddFile(path, 500)
 
-	if err := m.SetClientOptions(st.ID, 200, 1024, 2.0, false); err != nil {
+	if err := m.SetClientOptions(st.ID, 1024, 2.0, false); err != nil {
 		t.Fatal(err)
 	}
 	after, ok := m.Get(st.ID)
 	if !ok {
 		t.Fatal("Get returned ok=false")
-	}
-	if after.MinRateBytesPerSec != 200 {
-		t.Errorf("min = %d, want 200", after.MinRateBytesPerSec)
 	}
 	if after.MaxRateBytesPerSec != 1024 {
 		t.Errorf("max = %d, want 1024", after.MaxRateBytesPerSec)
@@ -144,9 +131,9 @@ func TestManagerSetClientOptions(t *testing.T) {
 	}
 
 	// SetClientOptions persists to state file.
-	min, max, ratio, _, _, _, ok := LoadStateFile(path)
-	if !ok || min != 200 || max != 1024 || ratio != 2.0 {
-		t.Errorf("state file = (%d, %d, %v, %v)", min, max, ratio, ok)
+	max, ratio, _, _, _, ok := LoadStateFile(path)
+	if !ok || max != 1024 || ratio != 2.0 {
+		t.Errorf("state file = (%d, %v, %v)", max, ratio, ok)
 	}
 }
 
@@ -155,15 +142,12 @@ func TestManagerSetClientOptionsValidation(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 100, 500)
+	st, _ := m.AddFile(path, 500)
 
-	if err := m.SetClientOptions(st.ID, 500, 100, 0, false); err == nil {
-		t.Error("min > max should error")
-	}
-	if err := m.SetClientOptions(st.ID, 100, 500, -1, false); err == nil {
+	if err := m.SetClientOptions(st.ID, 500, -1, false); err == nil {
 		t.Error("negative ratio should error")
 	}
-	if err := m.SetClientOptions("deadbeef", 100, 500, 0, false); err == nil {
+	if err := m.SetClientOptions("deadbeef", 500, 0, false); err == nil {
 		t.Error("unknown id should error")
 	}
 }
@@ -173,7 +157,7 @@ func TestManagerRemove(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 100, 500)
+	st, _ := m.AddFile(path, 500)
 
 	if err := m.Remove(st.ID); err != nil {
 		t.Fatal(err)
@@ -199,7 +183,7 @@ func TestManagerRemoveByPath(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 100, 500)
+	st, _ := m.AddFile(path, 500)
 
 	m.RemoveByPath(path)
 	if m.Exists(st.ID) {
@@ -222,8 +206,8 @@ func TestManagerRemoveUnder(t *testing.T) {
 	}
 	subPath := newTestTorrent(t, sub, "private", srv.URL)
 	rootPath := newTestTorrent(t, dir, "shared", srv.URL)
-	sub1, _ := m.AddFile(subPath, 100, 500)
-	root1, _ := m.AddFile(rootPath, 100, 500)
+	sub1, _ := m.AddFile(subPath, 500)
+	root1, _ := m.AddFile(rootPath, 500)
 
 	m.RemoveUnder(sub)
 	if m.Exists(sub1.ID) {
@@ -240,7 +224,7 @@ func TestManagerPageAndFilter(t *testing.T) {
 	m := newTestManager(t, dir)
 	for _, n := range []string{"alpha", "beta", "gamma"} {
 		path := newTestTorrent(t, dir, n, srv.URL)
-		if _, err := m.AddFile(path, 100, 500); err != nil {
+		if _, err := m.AddFile(path, 500); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -269,7 +253,7 @@ func TestManagerVisible(t *testing.T) {
 	m := newTestManager(t, dir)
 
 	rootPath := newTestTorrent(t, dir, "shared", srv.URL)
-	if _, err := m.AddFile(rootPath, 100, 500); err != nil {
+	if _, err := m.AddFile(rootPath, 500); err != nil {
 		t.Fatal(err)
 	}
 	aliceDir := filepath.Join(dir, "alice")
@@ -277,7 +261,7 @@ func TestManagerVisible(t *testing.T) {
 		t.Fatal(err)
 	}
 	alicePath := newTestTorrent(t, aliceDir, "secret", srv.URL)
-	if _, err := m.AddFile(alicePath, 100, 500); err != nil {
+	if _, err := m.AddFile(alicePath, 500); err != nil {
 		t.Fatal(err)
 	}
 
@@ -305,7 +289,7 @@ func TestManagerSubscribeFiresOnAdd(t *testing.T) {
 	defer cancel()
 
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	if _, err := m.AddFile(path, 100, 500); err != nil {
+	if _, err := m.AddFile(path, 500); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -326,10 +310,10 @@ func TestManagerSubscribeCoalesces(t *testing.T) {
 	// should be silently dropped (channel depth 1).
 	p1 := newTestTorrent(t, dir, "a", srv.URL)
 	p2 := newTestTorrent(t, dir, "b", srv.URL)
-	if _, err := m.AddFile(p1, 100, 500); err != nil {
+	if _, err := m.AddFile(p1, 500); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.AddFile(p2, 100, 500); err != nil {
+	if _, err := m.AddFile(p2, 500); err != nil {
 		t.Fatal(err)
 	}
 
@@ -359,7 +343,7 @@ func TestManagerSubscribeUnsubscribeCloses(t *testing.T) {
 
 func TestOwner(t *testing.T) {
 	cases := map[string]string{
-		"alice" + string(filepath.Separator) + "movie.torrent":            "alice",
+		"alice" + string(filepath.Separator) + "movie.torrent":                                   "alice",
 		"bob" + string(filepath.Separator) + "sub" + string(filepath.Separator) + "clip.torrent": "bob",
 		"loose.torrent": "",
 		"":              "",

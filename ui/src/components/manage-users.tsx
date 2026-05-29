@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { List, Network, Ticket, Trash2, Users } from 'lucide-react'
+import { Gauge, List, Network, Ticket, Trash2, Users } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 
@@ -12,6 +12,7 @@ import {
   revokeInvite,
   type Device,
   type PendingInvite,
+  type SeedingProfile,
 } from '@/lib/api'
 import { formatETA, formatRelative } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog, type ConfirmDialogProps } from '@/components/confirm-dialog'
+import { BandwidthDialog } from '@/components/bandwidth-dialog'
 
 interface ManageUsersProps {
   open: boolean
@@ -305,6 +307,7 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
   const [showUsers, setShowUsers] = useState(true)
   const [showInvites, setShowInvites] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
+  const [bwUser, setBwUser] = useState<{ username: string; bytes: number; profile: SeedingProfile } | null>(null)
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -462,16 +465,32 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
                                 <span className="text-muted-foreground"> · admin</span>
                               )}
                             </span>
-                            {!admin && (
+                            <div className="flex items-center gap-1">
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="text-destructive"
-                                onClick={() => delUser(username)}
+                                size="icon"
+                                aria-label="Set bandwidth"
+                                onClick={() =>
+                                  setBwUser({
+                                    username,
+                                    bytes: (groups.get(username) ?? [])[0]?.bandwidth ?? 0,
+                                    profile: (groups.get(username) ?? [])[0]?.profile ?? 'normal',
+                                  })
+                                }
                               >
-                                Remove user
+                                <Gauge />
                               </Button>
-                            )}
+                              {!admin && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive"
+                                  onClick={() => delUser(username)}
+                                >
+                                  Remove user
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <ul className="mt-2 flex flex-col gap-1">
                             {(groups.get(username) ?? []).map((d) => (
@@ -594,6 +613,17 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
           open
           onOpenChange={(v) => { if (!v) setPending(null) }}
           {...pending}
+        />
+      )}
+
+      {bwUser && (
+        <BandwidthDialog
+          open
+          onOpenChange={(v) => { if (!v) setBwUser(null) }}
+          username={bwUser.username}
+          initialBytes={bwUser.bytes}
+          initialProfile={bwUser.profile}
+          onSaved={refresh}
         />
       )}
     </>

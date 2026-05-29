@@ -11,8 +11,8 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/jdel/emission/internal/auth"
-	"github.com/jdel/emission/internal/seeder"
 	"github.com/jdel/emission/internal/client"
+	"github.com/jdel/emission/internal/seeder"
 	"github.com/jdel/emission/internal/units"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -32,10 +32,10 @@ With --http.api, an HTTP API is served on --http.port; with --http.ui the
 web interface is served too (this implies --http.api). Seeding continues
 in the background whether or not the API is on.
 
-Each torrent reports a random upload rate between --client.min-speed and
---client.max-speed bytes/sec. Speed values accept K/M/G suffixes ("500K",
-"2M", "1.5G"). All values are binary (K=1024). Trailing "B" and "/s" are
-accepted.`,
+Each torrent reports an upload rate that scales with its leecher count up to
+--client.max-speed bytes/sec, and the sum across one user's torrents is capped
+by their --client.bandwidth. Speed values accept K/M/G suffixes ("500K", "2M",
+"1.5G"). All values are binary (K=1024). Trailing "B" and "/s" are accepted.`,
 		RunE: runServe,
 	}
 	cmd.Flags().String("storage.auth", "", "passkey credential file (default: XDG data dir)")
@@ -71,7 +71,11 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	minSpeed, maxSpeed, err := parseSpeeds()
+	maxSpeed, err := parseMaxSpeed()
+	if err != nil {
+		return err
+	}
+	bandwidth, err := parseBandwidth()
 	if err != nil {
 		return err
 	}
@@ -91,9 +95,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 
 	log.Info().Str("version", c.Version).Str("peer_id", c.PeerID).Msg("client")
-	log.Info().Uint64("min", minSpeed).Uint64("max", maxSpeed).Msg("speed range")
+	log.Info().Uint64("maxPerTorrent", maxSpeed).Uint64("userBandwidth", bandwidth).Msg("speed limits")
 
-	mgr := seeder.New(c, torrentsDir, viper.GetFloat64("client.max-ratio"), viper.GetBool("client.autoremove"))
+	mgr := seeder.New(c, torrentsDir, viper.GetFloat64("client.max-ratio"), viper.GetBool("client.autoremove"), bandwidth)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -117,7 +121,6 @@ func runServe(_ *cobra.Command, _ []string) error {
 			addr:           fmt.Sprintf(":%d", viper.GetInt("http.port")),
 			torrentsDir:    torrentsDir,
 			withUI:         uiEnabled,
-			defMin:         minSpeed,
 			defMax:         maxSpeed,
 			auth:           authSvc,
 			publicURL:      viper.GetString("http.public-url"),
@@ -140,7 +143,7 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 
 	// Watch the directory in the background; block until a signal arrives.
-	go watchDir(ctx, mgr, torrentsDir, minSpeed, maxSpeed)
+	go watchDir(ctx, mgr, torrentsDir, maxSpeed)
 	<-ctx.Done()
 
 	log.Info().Msg("shutting down")
@@ -193,26 +196,32 @@ func setupAuth(apiEnabled bool) (*auth.Service, error) {
 	return svc, nil
 }
 
-// parseSpeeds resolves --client.min-speed / --client.max-speed into bytes/sec.
-func parseSpeeds() (min, max uint64, err error) {
-	min, err = units.ParseRate(viper.GetString("client.min-speed"))
+// parseMaxSpeed resolves --client.max-speed into bytes/sec.
+func parseMaxSpeed() (uint64, error) {
+	max, err := units.ParseRate(viper.GetString("client.max-speed"))
 	if err != nil {
-		return 0, 0, fmt.Errorf("client.min-speed: %w", err)
+		return 0, fmt.Errorf("client.max-speed: %w", err)
 	}
-	max, err = units.ParseRate(viper.GetString("client.max-speed"))
+	return max, nil
+}
+
+// parseBandwidth resolves --client.bandwidth (the default per-user upload
+// ceiling) into bytes/sec. It must be positive — unlimited is not allowed.
+func parseBandwidth() (uint64, error) {
+	bw, err := units.ParseRate(viper.GetString("client.bandwidth"))
 	if err != nil {
-		return 0, 0, fmt.Errorf("client.max-speed: %w", err)
+		return 0, fmt.Errorf("client.bandwidth: %w", err)
 	}
-	if min > max {
-		return 0, 0, fmt.Errorf("client.min-speed (%d) > client.max-speed (%d)", min, max)
+	if bw == 0 {
+		return 0, fmt.Errorf("client.bandwidth must be greater than zero")
 	}
-	return min, max, nil
+	return bw, nil
 }
 
 // watchDir recursively seeds every .torrent under root and watches the whole
 // tree for changes until ctx ends. The Manager owns torrent/file bookkeeping;
 // this loop only translates filesystem events into Manager calls.
-func watchDir(ctx context.Context, mgr *seeder.Manager, root string, minSpeed, maxSpeed uint64) {
+func watchDir(ctx context.Context, mgr *seeder.Manager, root string, maxSpeed uint64) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Error().Err(err).Str("path", root).Msg("cannot start watcher")
@@ -233,7 +242,7 @@ func watchDir(ctx context.Context, mgr *seeder.Manager, root string, minSpeed, m
 					log.Error().Err(err).Str("path", path).Msg("cannot watch directory")
 				}
 			} else if isTorrentFile(d.Name()) {
-				_, _ = mgr.AddFile(path, minSpeed, maxSpeed)
+				_, _ = mgr.AddFile(path, maxSpeed)
 			}
 			return nil
 		})
@@ -258,11 +267,11 @@ func watchDir(ctx context.Context, mgr *seeder.Manager, root string, minSpeed, m
 				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 					watchTree(ev.Name)
 				} else if isTorrentFile(ev.Name) {
-					_, _ = mgr.AddFile(ev.Name, minSpeed, maxSpeed)
+					_, _ = mgr.AddFile(ev.Name, maxSpeed)
 				}
 			case ev.Op&fsnotify.Write != 0:
 				if isTorrentFile(ev.Name) {
-					_, _ = mgr.AddFile(ev.Name, minSpeed, maxSpeed)
+					_, _ = mgr.AddFile(ev.Name, maxSpeed)
 				}
 			case ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0:
 				if isTorrentFile(ev.Name) {

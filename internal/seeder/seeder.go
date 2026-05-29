@@ -44,7 +44,6 @@ type Status struct {
 	SizeBytes          uint64          `json:"sizeBytes"`
 	UploadedBytes      uint64          `json:"uploadedBytes"`
 	RateBytesPerSec    uint64          `json:"rateBytesPerSec"`
-	MinRateBytesPerSec uint64          `json:"minRateBytesPerSec"` // configured floor
 	MaxRateBytesPerSec uint64          `json:"maxRateBytesPerSec"` // configured ceiling
 	MaxRatio           float64         `json:"maxRatio"`           // upload cap as a multiple of torrent size (0 = unlimited)
 	Capped             bool            `json:"capped"`             // true when the ratio cap has been reached
@@ -91,6 +90,8 @@ type Manager struct {
 	clientMu    sync.Mutex
 	userClients map[string]*client.Client // per-owner identity; "" = unowned/root
 
+	settings *settingsStore // per-owner upload bandwidth + seeding profile
+
 	subsMu sync.Mutex
 	subs   map[chan struct{}]struct{}
 
@@ -102,9 +103,11 @@ type Manager struct {
 // owner's identity is cloned from; torrentsDir is the watched root that
 // .torrent file paths are reported relative to; maxRatio caps the simulated
 // upload at that multiple of the torrent size (0 = unlimited); autoRemove
-// removes the torrent automatically when the cap is reached. To override the
-// peer count requested per announce, set tmpl.NumWant before passing it in.
-func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove bool) *Manager {
+// removes the torrent automatically when the cap is reached; defaultBandwidth
+// is the per-user upload ceiling (bytes/sec) applied to users without an
+// explicit setting. To override the peer count requested per announce, set
+// tmpl.NumWant before passing it in.
+func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove bool, defaultBandwidth uint64) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	abs, err := filepath.Abs(torrentsDir)
 	if err != nil {
@@ -118,6 +121,7 @@ func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove b
 		torrentsDir: abs,
 		baseCtx:     ctx,
 		cancel:      cancel,
+		settings:    loadSettingsStore(filepath.Join(abs, userSettingsFileName), defaultBandwidth),
 		sessions:    make(map[string]*session),
 		byPath:      make(map[string]*session),
 		userClients: make(map[string]*client.Client),
@@ -144,14 +148,58 @@ func (m *Manager) clientFor(owner string) (*client.Client, error) {
 	return cl, nil
 }
 
-// AddFile reads and parses the .torrent file at path and starts seeding it at a
-// rate that varies randomly between minSpeed and maxSpeed (bytes/sec). The
-// torrent's info hash is its ID; a torrent already loaded (same hash) is
-// rejected. path should be absolute.
-func (m *Manager) AddFile(path string, minSpeed, maxSpeed uint64) (Status, error) {
-	if minSpeed > maxSpeed {
-		return Status{}, fmt.Errorf("min-speed exceeds max-speed")
+// cappedRate returns natural unless the sum of owner's natural rates across all
+// their torrents exceeds the owner's bandwidth, in which case it scales natural
+// down proportionally so the per-user total stays within the ceiling. Each
+// torrent's natural rate is recomputed deterministically (the ±20% jitter lives
+// in accumulateLoop), so the sum is consistent with every caller's own value.
+func (m *Manager) cappedRate(owner string, natural uint64) uint64 {
+	budget := m.settings.bandwidth(owner)
+	k := m.settings.profileK(owner)
+	var total uint64
+	m.mu.Lock()
+	for _, s := range m.sessions {
+		if s.owner != owner {
+			continue
+		}
+		var l int64
+		for _, ts := range s.trackers {
+			l += ts.leechers.Load()
+		}
+		total += naturalRate(s.maxSpeed.Load(), budget, l, k)
 	}
+	m.mu.Unlock()
+	if total == 0 || total <= budget {
+		return natural
+	}
+	// float avoids uint64 overflow on the intermediate product.
+	return uint64(float64(natural) * float64(budget) / float64(total))
+}
+
+// Bandwidth returns the upload-bandwidth ceiling (bytes/sec) for owner.
+func (m *Manager) Bandwidth(owner string) uint64 { return m.settings.bandwidth(owner) }
+
+// DefaultBandwidth returns the ceiling applied to owners without an explicit setting.
+func (m *Manager) DefaultBandwidth() uint64 { return m.settings.defBandwidth }
+
+// SetBandwidth sets owner's upload-bandwidth ceiling (bytes/sec) and persists it.
+func (m *Manager) SetBandwidth(owner string, bytesPerSec uint64) error {
+	return m.settings.setBandwidth(owner, bytesPerSec)
+}
+
+// Profile returns owner's seeding profile (stealth/normal/aggressive).
+func (m *Manager) Profile(owner string) string { return m.settings.profileName(owner) }
+
+// SetProfile sets owner's seeding profile and persists it.
+func (m *Manager) SetProfile(owner, name string) error {
+	return m.settings.setProfile(owner, name)
+}
+
+// AddFile reads and parses the .torrent file at path and starts seeding it at a
+// leecher-scaled rate up to maxSpeed (bytes/sec), bounded by the owner's
+// bandwidth. The torrent's info hash is its ID; a torrent already loaded (same
+// hash) is rejected. path should be absolute.
+func (m *Manager) AddFile(path string, maxSpeed uint64) (Status, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return Status{}, err
@@ -162,8 +210,8 @@ func (m *Manager) AddFile(path string, minSpeed, maxSpeed uint64) (Status, error
 	deleteOnCap := m.autoRemove
 	var addedAt time.Time
 	var uploadedBytes uint64
-	if sMin, sMax, sRatio, sAddedAt, sUploaded, sDeleteOnCap, ok := LoadStateFile(abs); ok {
-		minSpeed, maxSpeed, maxRatio = sMin, sMax, sRatio
+	if sMax, sRatio, sAddedAt, sUploaded, sDeleteOnCap, ok := LoadStateFile(abs); ok {
+		maxSpeed, maxRatio = sMax, sRatio
 		uploadedBytes = sUploaded
 		deleteOnCap = sDeleteOnCap
 		if sAddedAt > 0 {
@@ -173,7 +221,7 @@ func (m *Manager) AddFile(path string, minSpeed, maxSpeed uint64) (Status, error
 	if addedAt.IsZero() {
 		addedAt = time.Now()
 		// Persist so restarts restore the original add time and autoremove default.
-		_ = SaveStateFile(abs, minSpeed, maxSpeed, maxRatio, addedAt.UnixMilli(), 0, deleteOnCap)
+		_ = SaveStateFile(abs, maxSpeed, maxRatio, addedAt.UnixMilli(), 0, deleteOnCap)
 	}
 	data, err := os.ReadFile(abs)
 	if err != nil {
@@ -190,11 +238,12 @@ func (m *Manager) AddFile(path string, minSpeed, maxSpeed uint64) (Status, error
 	if _, dup := m.sessions[id]; dup {
 		return Status{}, fmt.Errorf("torrent already loaded: %s", meta.Name)
 	}
-	cl, err := m.clientFor(Owner(m.relPath(abs)))
+	owner := Owner(m.relPath(abs))
+	cl, err := m.clientFor(owner)
 	if err != nil {
 		return Status{}, fmt.Errorf("client identity: %w", err)
 	}
-	s := newSession(m.baseCtx, id, meta, abs, minSpeed, maxSpeed, maxRatio, addedAt, cl, m)
+	s := newSession(m.baseCtx, id, meta, abs, maxSpeed, maxRatio, addedAt, owner, cl, m)
 	if uploadedBytes > 0 {
 		s.uploaded.Store(uploadedBytes)
 	}
@@ -251,15 +300,12 @@ func (m *Manager) Remove(id string) error {
 	return nil
 }
 
-// SetClientOptions updates a live torrent's per-client overrides — min/max
-// upload rate and ratio cap — and persists them to its state file. The new
-// range takes effect immediately: the current rate is re-rolled into the new
-// band, and the upload cap is recomputed against the new ratio (maxRatio == 0
-// means unlimited).
-func (m *Manager) SetClientOptions(id string, minSpeed, maxSpeed uint64, maxRatio float64, deleteOnCap bool) error {
-	if minSpeed > maxSpeed {
-		return fmt.Errorf("min-speed exceeds max-speed")
-	}
+// SetClientOptions updates a live torrent's per-client overrides — max upload
+// rate and ratio cap — and persists them to its state file. The change takes
+// effect immediately: the current rate is re-rolled against the new ceiling,
+// and the upload cap is recomputed against the new ratio (maxRatio == 0 means
+// unlimited).
+func (m *Manager) SetClientOptions(id string, maxSpeed uint64, maxRatio float64, deleteOnCap bool) error {
 	if maxRatio < 0 {
 		return fmt.Errorf("max-ratio must be non-negative")
 	}
@@ -269,7 +315,6 @@ func (m *Manager) SetClientOptions(id string, minSpeed, maxSpeed uint64, maxRati
 		m.mu.Unlock()
 		return fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
-	s.minSpeed.Store(minSpeed)
 	s.maxSpeed.Store(maxSpeed)
 	s.maxRatio = maxRatio
 	s.uploadCap.Store(uploadCapFor(s.meta.Length, maxRatio))
@@ -277,13 +322,16 @@ func (m *Manager) SetClientOptions(id string, minSpeed, maxSpeed uint64, maxRati
 	for _, ts := range s.trackers {
 		leechers += ts.leechers.Load()
 	}
-	s.rate.Store(pickRateWeighted(minSpeed, maxSpeed, leechers))
+	// Re-roll into the new ceiling immediately; the owner's proportional cap is
+	// applied by pickRateLoop on its next tick (cappedRate locks m.mu, which we
+	// hold here). naturalRate already clamps to the owner's bandwidth.
+	s.rate.Store(naturalRate(maxSpeed, m.settings.bandwidth(s.owner), leechers, m.settings.profileK(s.owner)))
 	s.deleteOnCap.Store(deleteOnCap)
 	path := s.path
 	addedAtMs := s.addedAt.UnixMilli()
 	uploadedMs := s.uploaded.Load()
 	m.mu.Unlock()
-	if err := SaveStateFile(path, minSpeed, maxSpeed, maxRatio, addedAtMs, uploadedMs, deleteOnCap); err != nil {
+	if err := SaveStateFile(path, maxSpeed, maxRatio, addedAtMs, uploadedMs, deleteOnCap); err != nil {
 		return fmt.Errorf("save state file: %w", err)
 	}
 	return nil

@@ -41,7 +41,11 @@ func runSeed(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	minSpeed, maxSpeed, err := parseSpeeds()
+	maxSpeed, err := parseMaxSpeed()
+	if err != nil {
+		return err
+	}
+	bandwidth, err := parseBandwidth()
 	if err != nil {
 		return err
 	}
@@ -61,14 +65,14 @@ func runSeed(_ *cobra.Command, _ []string) error {
 	}
 
 	log.Info().Str("version", c.Version).Str("peer_id", c.PeerID).Msg("client")
-	log.Info().Uint64("min", minSpeed).Uint64("max", maxSpeed).Msg("speed range")
+	log.Info().Uint64("maxPerTorrent", maxSpeed).Uint64("userBandwidth", bandwidth).Msg("speed limits")
 
-	mgr := seeder.New(c, torrentsDir, viper.GetFloat64("client.max-ratio"), viper.GetBool("client.autoremove"))
+	mgr := seeder.New(c, torrentsDir, viper.GetFloat64("client.max-ratio"), viper.GetBool("client.autoremove"), bandwidth)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	go watchDir(ctx, mgr, torrentsDir, minSpeed, maxSpeed)
+	go watchDir(ctx, mgr, torrentsDir, maxSpeed)
 	go statsLoop(ctx, mgr)
 	<-ctx.Done()
 
