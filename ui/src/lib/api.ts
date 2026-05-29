@@ -167,9 +167,18 @@ export async function setUserBandwidth(
 // --- authentication (passkeys) ---------------------------------------------
 
 export interface AuthStatus {
-  authEnabled: boolean // false = no auth configured, everything is open
   authenticated: boolean
   username?: string // the logged-in user, when authenticated
+}
+
+/**
+ * isAuthEnabled tells whether the server has authentication configured.
+ * Derived from the status response: an auth-disabled server returns
+ * authenticated=true with no username, so a missing username on an
+ * authenticated response means auth is off.
+ */
+export function isAuthEnabled(s: AuthStatus): boolean {
+  return !s.authenticated || !!s.username
 }
 
 /** getAuthStatus reports whether auth is on and whether this client is in. */

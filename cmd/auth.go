@@ -30,12 +30,12 @@ const sessionCookie = "emission_session"
 //	@Router		/api/auth/status [get]
 func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
 	if s.auth == nil {
-		writeJSON(w, http.StatusOK, authStatusResponse{AuthEnabled: false, Authenticated: true})
+		// Auth-disabled: no session, but every request is permitted.
+		writeJSON(w, http.StatusOK, authStatusResponse{Authenticated: true})
 		return
 	}
 	username, authed := s.sessionUsername(r)
 	writeJSON(w, http.StatusOK, authStatusResponse{
-		AuthEnabled:   true,
 		Authenticated: authed,
 		Username:      username,
 	})

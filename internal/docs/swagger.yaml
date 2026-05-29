@@ -7,8 +7,6 @@ definitions:
     type: object
   cmd.authStatusResponse:
     properties:
-      authEnabled:
-        type: boolean
       authenticated:
         type: boolean
       username:

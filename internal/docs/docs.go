@@ -709,9 +709,6 @@ const docTemplate = `{
         "cmd.authStatusResponse": {
             "type": "object",
             "properties": {
-                "authEnabled": {
-                    "type": "boolean"
-                },
                 "authenticated": {
                     "type": "boolean"
                 },

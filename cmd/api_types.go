@@ -60,9 +60,12 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// authStatusResponse is the GET /api/auth/status response.
+// authStatusResponse is the GET /api/auth/status response. Auth-disabled
+// servers return {authenticated: true} with no username; auth-enabled
+// servers return {authenticated: true, username: "..."} for a valid
+// session, or {authenticated: false} otherwise. The client derives whether
+// auth is configured from these two fields.
 type authStatusResponse struct {
-	AuthEnabled   bool   `json:"authEnabled"`
 	Authenticated bool   `json:"authenticated"`
 	Username      string `json:"username,omitempty"`
 }

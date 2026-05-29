@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { getAuthStatus, type AuthStatus } from '@/lib/api'
+import { getAuthStatus, isAuthEnabled, type AuthStatus } from '@/lib/api'
 import { CookieNotice } from '@/components/cookie-notice'
 import { Dashboard } from '@/components/dashboard'
 import { Login } from '@/components/login'
@@ -14,7 +14,7 @@ function App() {
   const refresh = useCallback(() => {
     getAuthStatus()
       .then(setStatus)
-      .catch(() => setStatus({ authEnabled: true, authenticated: false }))
+      .catch(() => setStatus({ authenticated: false }))
   }, [])
 
   useEffect(() => {
@@ -29,9 +29,11 @@ function App() {
     )
   }
 
+  const authEnabled = isAuthEnabled(status)
+
   // The cookie notice only matters when auth is on (no auth = no session
   // cookie set).
-  const notice = status.authEnabled ? <CookieNotice /> : null
+  const notice = authEnabled ? <CookieNotice /> : null
 
   // The bootstrap admin-registration screen lives at /start (server-gated:
   // the route only renders the SPA while the bootstrap window is open). A
@@ -41,7 +43,7 @@ function App() {
     window.history.replaceState({}, '', '/')
   }
 
-  if (status.authEnabled && !status.authenticated) {
+  if (!status.authenticated) {
     const invite = new URLSearchParams(window.location.search).get('invite')
     // An invite link → register that user. /start → register the admin.
     // Otherwise → log in.
@@ -60,7 +62,7 @@ function App() {
   return (
     <>
       <Dashboard
-        authEnabled={status.authEnabled}
+        authEnabled={authEnabled}
         username={status.username}
         onSignedOut={refresh}
       />
