@@ -184,7 +184,7 @@ func setupAuth(apiEnabled bool) (*auth.Service, error) {
 		return nil, err
 	}
 	if n := svc.CredentialCount(); n == 0 {
-		log.Info().Str("url", publicURL).Msg("no admin registered yet — open within 15 minutes to set one up")
+		log.Info().Str("url", publicURL+"/start").Msg("no admin registered yet — open within 15 minutes to set one up")
 	} else {
 		log.Info().Int("devices", n).Msg("auth enabled")
 	}
