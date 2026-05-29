@@ -7,6 +7,7 @@ import {
   ADMIN_USERNAME,
   listUsers,
   listInvites,
+  listTorrents,
   removeCredential,
   removeUser,
   revokeInvite,
@@ -26,6 +27,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog, type ConfirmDialogProps } from '@/components/confirm-dialog'
 import { BandwidthDialog } from '@/components/bandwidth-dialog'
+
+// ownerOf returns the username that owns a torrent, from the first path segment
+// of its location ("" = root / shared, not attributed to a named user).
+function ownerOf(location: string): string {
+  const i = location.indexOf('/')
+  return i >= 0 ? location.slice(0, i) : ''
+}
 
 interface ManageUsersProps {
   open: boolean
@@ -308,13 +316,20 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
   const [showInvites, setShowInvites] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
   const [bwUser, setBwUser] = useState<{ username: string; bytes: number; profile: SeedingProfile } | null>(null)
+  const [torrentCounts, setTorrentCounts] = useState<Record<string, number>>({})
 
   const refresh = useCallback(() => {
     setLoading(true)
-    Promise.all([listUsers(), listInvites()])
-      .then(([d, i]) => {
+    Promise.all([listUsers(), listInvites(), listTorrents({ limit: 0 })])
+      .then(([d, i, page]) => {
         setDevices(d)
         setInvites(i)
+        const counts: Record<string, number> = {}
+        for (const tr of page.items) {
+          const owner = ownerOf(tr.location)
+          if (owner) counts[owner] = (counts[owner] ?? 0) + 1
+        }
+        setTorrentCounts(counts)
       })
       .catch((e) => toast.error(`Load failed: ${String(e)}`))
       .finally(() => setLoading(false))
@@ -427,11 +442,17 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
               {/* Left column: filters */}
               <div className="flex w-44 shrink-0 flex-col gap-2">
                 <Input
-                  placeholder="Search…"
+                  placeholder="Filter by user…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-8 text-sm"
+                  list="mu-user-filter"
                 />
+                <datalist id="mu-user-filter">
+                  {[...groups.keys()].sort().map((u) => (
+                    <option key={u} value={u} />
+                  ))}
+                </datalist>
                 <Button
                   variant={showUsers ? 'secondary' : 'outline'}
                   size="sm"
@@ -464,6 +485,11 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
                               {admin && (
                                 <span className="text-muted-foreground"> · admin</span>
                               )}
+                              <span className="text-muted-foreground font-normal">
+                                {' · '}
+                                {torrentCounts[username] ?? 0} torrent
+                                {(torrentCounts[username] ?? 0) === 1 ? '' : 's'}
+                              </span>
                             </span>
                             <div className="flex items-center gap-1">
                               <Button

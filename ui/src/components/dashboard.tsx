@@ -367,14 +367,14 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
                             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
                             onSelect={() => authRef.current?.addDevice()}
                           >
-                            <Smartphone className="size-4" /> Add device
+                            <UserPlus className="size-4" /> Add device
                           </DropdownMenu.Item>
                         )}
                         <DropdownMenu.Item
                           className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
                           onSelect={() => authRef.current?.openInvite()}
                         >
-                          <UserPlus className="size-4" /> Invite user
+                          <Smartphone className="size-4" /> Invite user
                         </DropdownMenu.Item>
                         {isAdmin && (
                           <DropdownMenu.Item

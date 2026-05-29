@@ -265,7 +265,7 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
             disabled={!username}
             onClick={() => setMyDevicesOpen(true)}
           >
-            <Smartphone />
+            <UserPlus />
           </Button>
         )}
         <Button
@@ -274,7 +274,7 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
           aria-label="Invite a user"
           onClick={() => { setAskName(''); setPhase('ask') }}
         >
-          <UserPlus />
+          <Smartphone />
         </Button>
         {isAdmin && (
           <Button
