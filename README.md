@@ -5,21 +5,24 @@
 > The process took some trial and error, but ultimately the goal of this app has been reached
 
 Fools private BitTorrent trackers by spoofing announces, inflating your
-ratio without transferring any real data. Impersonates real clients (qBittorrent,
-Transmission, Deluge, µTorrent, and more) to blend in with legitimate peers.
+ratio without transferring any real data. Impersonates real clients
+(qBittorrent, Transmission, Deluge, µTorrent, and more) so the announces
+blend in with legitimate peers.
 
 > **Use at your own risk.** Most private trackers prohibit ratio manipulation.
 > Getting caught may result in a permanent ban.
 
 **Safety mechanisms built in:**
-- Upload only accumulates when at least one leecher is in the swarm; rate is zero otherwise
-- Upload rate scales with leecher count (hyperbolic weighting) so traffic looks organic
-- Optional ratio cap (`--client.max-ratio`) stops accumulating once the target is hit
-- Optional auto-remove (`--client.autoremove`) deletes the torrent when the cap is reached
-- Tracker `min_interval` is respected — no more frequent than the tracker requests
-- Exponential backoff on tracker errors (doubles each failure, capped at 30 minutes)
-- Clean "stopped" announce sent to each tracker on shutdown
-- Reports `downloaded = torrent size` (complete seeder from day one)
+- Upload only accumulates when at least one leecher is in the swarm; rate is zero otherwise.
+- Upload rate scales with leecher count (hyperbolic weighting) so traffic looks organic.
+- Per-user upload bandwidth ceiling (`--client.bandwidth`) shared proportionally across that user's torrents.
+- Three seeding profiles (stealth / normal / aggressive) control how steeply the rate ramps with leechers.
+- Optional ratio cap (`--client.max-ratio`) stops accumulating once the target is hit.
+- Optional auto-remove (`--client.autoremove`) deletes the torrent when the cap is reached.
+- Tracker `min_interval` is respected — emission never announces more often than the tracker asks.
+- Exponential backoff on tracker errors (doubles each failure, capped at 30 minutes).
+- Clean "stopped" announce sent to each tracker on shutdown.
+- Reports `downloaded = torrent size` (complete seeder from day one).
 
 ![Screenshot](screenshot.png)
 
@@ -31,7 +34,7 @@ Transmission, Deluge, µTorrent, and more) to blend in with legitimate peers.
 
 Download the right archive for your platform from the
 [releases page](https://github.com/jdel/emission/releases) and drop the
-binary into `~/.local/bin`:
+binary into `~/.local/bin`.
 
 Adjust the URL for your platform/arch:
 
@@ -48,9 +51,11 @@ wget -qO- https://github.com/jdel/emission/releases/latest/download/emission-lin
   | tar -xz -C ~/.local/bin emission
 ```
 
-Make sure `~/.local/bin` is on your `PATH`. Most Linux distros add it
-automatically. On macOS (and some Linux setups) you have to add it
-yourself — append the line below to your shell's rc file:
+Make sure `~/.local/bin` is on your `PATH`.
+
+Most Linux distros add it automatically. On macOS (and some Linux setups)
+you have to add it yourself — append the line below to your shell's
+rc file:
 
 ```sh
 # bash (~/.bashrc) or zsh (~/.zshrc, default on macOS):
@@ -68,13 +73,11 @@ emission --help
 
 ### Windows
 
-Grab `emission-windows-amd64.zip` from the releases page, unzip it, and
-run `emission.exe` from a terminal.
+Grab `emission-windows-amd64.zip` from the releases page, unzip it, and run `emission.exe` from a terminal.
 
 ### Docker
 
-Behind a Traefik reverse proxy with automatic HTTPS — see
-[`example/docker-compose/`](example/docker-compose/).
+Behind a Traefik reverse proxy with automatic HTTPS — see [`example/docker-compose/`](example/docker-compose/).
 
 ### Other install paths
 
@@ -95,19 +98,19 @@ It prints the URL it's listening on (something like
 `http://localhost:8080`). Open that in your browser, then:
 
 1. Click "Add torrent" to pick a `.torrent` file from your computer.
-2. Click a torrent's slider icon to edit its min/max speed and ratio cap.
+2. Click a torrent's slider icon to edit its max upload rate and ratio cap.
 3. Click the trash icon to stop and delete a torrent.
 
 `.torrent` files and their settings live under
-`~/.local/share/emission/` (Linux) /
-`~/Library/Application Support/emission/` (macOS) by default. Override
-with `--storage.torrents <dir>`.
+`~/.local/share/emission/` (Linux) or
+`~/Library/Application Support/emission/` (macOS) by default.
+Override with `--storage.torrents <dir>`.
 
-Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal to stop emission. The
-final "stopped" announces are sent to each tracker before exit.
+Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal to stop emission.
+The final "stopped" announces are sent to each tracker before exit.
 
-emission impersonates **Transmission 4.0.6** by default. To use a
-different client profile:
+emission impersonates **Transmission 4.0.6** by default.
+To use a different client profile:
 
 ```sh
 emission clients              # list every supported profile
@@ -118,18 +121,18 @@ emission serve --http.ui --client.name qbittorrent-4.4.2
 
 ## CLI-only mode (no web UI)
 
-If you don't want the web UI — for example on a headless server seeded
-by another tool that drops `.torrent` files into a folder — use `seed`:
+If you don't want the web UI — for example on a headless server
+seeded by another tool that drops `.torrent` files into a folder —
+use `seed`:
 
 ```sh
-emission seed                       # default folder, default speeds
+emission seed                       # default folder, default bandwidth (1M)
 emission seed --storage.torrents /srv/torrents \
-              --client.min-speed 200K \
-              --client.max-speed 2M \
+              --client.bandwidth 2M \
               --client.max-ratio 2.0
 ```
 
-Every flag is also an env var (`EMISSION_CLIENT_MIN_SPEED=200K`) and can
+Every flag is also an env var (`EMISSION_CLIENT_BANDWIDTH=2M`) and can
 live in a config file — see [Configuration](#configuration).
 
 ---
@@ -149,7 +152,12 @@ Let Traefik / Caddy / nginx handle the certificate. The Docker example
 in [`example/docker-compose/`](example/docker-compose/) does this with
 Traefik and Let's Encrypt.
 
-> **Warning:** when running behind a reverse proxy, set `--http.trusted-proxies` (or `EMISSION_HTTP_TRUSTED_PROXIES`) to the proxy's subnet. Without it, the rate limiter sees the proxy's IP for every request — all clients share one bucket, the burst exhausts immediately, and legitimate users get 429s. The bundled Docker Compose example sets this automatically.
+> **Warning:** when running behind a reverse proxy, set
+> `--http.trusted-proxies` (or `EMISSION_HTTP_TRUSTED_PROXIES`) to the
+> proxy's subnet. Without it the rate limiter sees the proxy's IP for
+> every request — all clients share one bucket, the burst exhausts
+> immediately, and legitimate users get 429s. The bundled Docker Compose
+> example sets this automatically.
 
 ### Direct TLS
 
@@ -182,8 +190,7 @@ emission serve \
 |------|---------|-------------|
 | `--storage.torrents`  | `EMISSION_STORAGE_TORRENTS`  | Directory to watch (default: `~/.local/share/emission/torrents`) |
 | `--client.name`       | `EMISSION_CLIENT_NAME`       | Client profile to impersonate (default: `transmission-4.0.6`) |
-| `--client.min-speed`  | `EMISSION_CLIENT_MIN_SPEED`  | Minimum upload rate (default: `50K`) |
-| `--client.max-speed`  | `EMISSION_CLIENT_MAX_SPEED`  | Maximum upload rate (default: `500K`) |
+| `--client.bandwidth`  | `EMISSION_CLIENT_BANDWIDTH`  | Per-user upload bandwidth ceiling, shared proportionally across that user's torrents and used as each new torrent's default max (default: `1M`) |
 | `--client.max-peers`  | `EMISSION_CLIENT_MAX_PEERS`  | Peers to request per tracker (`0` = client default) |
 | `--client.max-ratio`  | `EMISSION_CLIENT_MAX_RATIO`  | Stop accumulating upload at N × torrent size (`0` = unlimited) |
 | `--client.autoremove` | `EMISSION_CLIENT_AUTOREMOVE` | Remove the torrent automatically when the ratio cap is reached (default: `false`) |
@@ -209,13 +216,21 @@ emission serve \
 
 The meaning of `--http.public-url` depends on whether `--http.auth` is enabled.
 
-**With `--http.auth` (required).** A single canonical external URL (`scheme://host[:port]`). Used for the passkey (WebAuthn) origin, the `Secure` cookie flag, and invite links — must exactly match what the browser sees. No wildcards.
+**With `--http.auth` (required).** A single canonical external URL
+(`scheme://host[:port]`). Used for the passkey (WebAuthn) origin, the
+`Secure` cookie flag, and invite links — it must exactly match what
+the browser sees. No wildcards.
 
 ```sh
 emission serve --http.auth --http.public-url https://emission.example.com
 ```
 
-**Without `--http.auth` (LAN / trusted-network use).** Reused to control which browser origins the live-stats WebSocket accepts. Takes a **comma-separated list of origin host patterns** (`host:port`); `*` works as a glob within a pattern. `localhost` is always accepted. Omit the flag and only same-machine browsers can connect to the stats feed.
+**Without `--http.auth` (LAN / trusted-network use).** Reused to
+control which browser origins the live-stats WebSocket accepts.
+Takes a comma-separated list of origin host patterns (`host:port`).
+`*` works as a glob within a pattern. `localhost` is always accepted.
+Omit the flag and only same-machine browsers can connect to the stats
+feed.
 
 ```sh
 # one fixed LAN address
@@ -225,76 +240,97 @@ emission serve --http.ui --http.public-url 10.0.0.12:8080
 emission serve --http.ui --http.public-url "10.0.0.*:8080,*.lan:8080"
 ```
 
-Each pattern must match the browser's address bar (host and port). A bare `*` is ignored — it would accept any website's cross-origin connection. Only run an auth-off instance on a network you trust.
+Each pattern must match the browser's address bar (host and port).
+A bare `*` is ignored — it would accept any website's cross-origin
+connection. Only run an auth-off instance on a network you trust.
 
 ---
 
 ## API
 
-`serve --http.api` exposes a JSON REST API. Interactive docs at `/docs`
-(Swagger UI). Full spec at `/docs/swagger.json`.
+`serve --http.api` exposes a JSON REST API.
+
+Interactive docs at `/docs` (Swagger UI).
+Full spec at `/docs/swagger.json`.
 
 ```
 GET    /api/torrents               list torrents (paged: ?limit, ?offset, ?q)
-POST   /api/torrents               upload a .torrent (multipart: file, min-speed, max-speed, max-ratio)
+POST   /api/torrents               upload a .torrent (multipart: file, max-speed, max-ratio)
 GET    /api/torrents/{id}/stats    rate/leecher history for one torrent
-PATCH  /api/torrents/{id}          update per-torrent overrides {minSpeed, maxSpeed, maxRatio, deleteOnCap}
+PATCH  /api/torrents/{id}          update per-torrent overrides {maxSpeed, maxRatio, deleteOnCap}
 DELETE /api/torrents/{id}          stop and remove a torrent
 GET    /api/ws                     WebSocket: live stats + list-changed events
+GET    /api/bandwidth              caller's own upload bandwidth + seeding profile
+PUT    /api/bandwidth              update caller's own bandwidth + profile
 GET    /api/auth/status            auth state
 POST   /api/auth/login/begin       passkey login (WebAuthn)
 POST   /api/auth/invite            create invite link (any authenticated user)
+PUT    /api/auth/users/{u}/bandwidth   set another user's bandwidth (admin)
 ...                                full spec at /docs
 ```
 
 The WebSocket pushes several message types:
-- `{type:"stats", torrents:[…]}` — live snapshot of every visible torrent, ~once per second
-- `{type:"changed"}` — torrent list added or removed
-- `{type:"stats_history", history:{<id>:[…]}}` — full rate/leecher history on connect
-- `{type:"stat_point", id:"…", point:{…}}` — one new history data point (~every 30 s)
+- `{type:"stats", torrents:[…]}` — live snapshot of every visible torrent, ~once per second.
+- `{type:"changed"}` — torrent list added or removed.
+- `{type:"stats_history", history:{<id>:[…]}}` — full rate/leecher history on connect.
+- `{type:"stat_point", id:"…", point:{…}}` — one new history data point (~every 30 s).
 
 ---
 
 ## Authentication
 
 **Off by default.** With auth off, anyone who reaches the port can use
-emission. For local-only or LAN-only use, that's fine. For anything
-reachable from the public internet, turn it on:
+emission. For local-only or LAN-only use, that's fine.
+
+For anything reachable from the public internet, turn it on:
 
 ```sh
 emission serve --http.ui --http.auth --http.public-url https://your.host
 ```
 
-emission uses **passkeys** — the same passwordless login your phone uses
-("sign in with Face ID / fingerprint / Windows Hello / a USB security
-key"). No passwords, no email, no SMS. The browser talks to your device's
+emission uses **passkeys** — the same passwordless login your phone
+uses ("sign in with Face ID / fingerprint / Windows Hello / a USB
+security key").
+
+No passwords, no email, no SMS. The browser talks to your device's
 authenticator; emission only sees the public part. Any modern browser
 supports passkeys.
 
 ### First-time setup (the bootstrap window)
 
 The first 15 minutes after emission starts — and only while no admin
-exists — anyone who hits the public URL can register the admin device.
-That's how you bootstrap.
+exists — the operator can register the admin device at the dedicated
+`/start` URL. That's how you bootstrap.
 
-- **Open `--http.public-url` in your browser within 15 minutes**, complete
-  the passkey prompt your OS/browser shows. You're now the admin.
-- **Missed the window?** Just restart emission. As long as no admin
-  registered, the window opens again on the next start. Nothing to
-  delete.
+- **On a fresh install** (no users yet) emission redirects the public
+  URL straight to `/start` for convenience. Open `--http.public-url`
+  within 15 minutes and complete the passkey prompt — you're now the
+  admin.
+- **Re-opening the window** (e.g. admin device lost): delete the
+  admin's credential entry and restart. Other users keep their accounts
+  and see the normal login screen; only the operator who knows the
+  `/start` URL sees the registration page. The fresh-install redirect
+  does not fire when other users still exist.
+- **Missed the window?** Restart emission. As long as no admin is
+  registered, a new 15-minute window opens.
 - **Lost your admin device after registering?** Delete the credential
-  file (default: `~/.local/share/emission/auth.json`) and restart. Next
-  startup opens a fresh bootstrap window.
+  file (default: `~/.local/share/emission/auth.json`) and restart.
+  Next startup opens a fresh bootstrap window.
 
 ### Day-to-day
 
-- **Admin** (`admin`) is a fixed user — one device, sees every torrent,
-  manages users. Cannot be deleted.
-- **Inviting other users:** any authenticated user can click "Invite"
+- **Admin** (`admin`) is a fixed user — one or more devices, sees
+  every torrent, manages users and per-user bandwidth. Cannot be
+  deleted.
+- **Inviting other users.** Any authenticated user can click "Invite"
   in the UI, enter a username, and get a one-time link (and a 3-word
-  code). Send the link to the new user; they open it and register their
-  own device. Codes expire in 24 hours.
-- **Per-user storage:** uploads go to `<storage.torrents>/<username>/`.
+  code). Send the link to the new user; they open it and register
+  their own device. Codes expire in 24 hours.
+- **Per-user bandwidth + seeding profile.** Every user has an upload
+  bandwidth ceiling and a seeding profile (stealth / normal /
+  aggressive). Users edit their own; admins edit anyone's. Each
+  torrent defaults its max upload rate to its owner's bandwidth.
+- **Per-user storage.** Uploads go to `<storage.torrents>/<username>/`.
   Each user sees only their own torrents plus anything in the root
   (shared by the admin).
 - **Sessions** are HttpOnly + SameSite=Strict cookies with a sliding
@@ -313,15 +349,18 @@ device on the next login:
   device).
 - An internal counter the protocol uses to detect cloned credentials.
 
-What is **not** stored: no IP addresses, no email, no phone number, no
-browser fingerprint, no geolocation, no usage logs. emission does not
-"phone home" or report to any third party.
+What is **not** stored: no IP addresses, no email, no phone number,
+no browser fingerprint, no geolocation, no usage logs.
+
+emission does not "phone home" or report to any third party.
 
 ### Cookies
 
 emission sets exactly one cookie, `emission_session`, when you log in.
 It holds a random session token — no personal data, no tracking
-identifier. It's marked `HttpOnly` (JavaScript cannot read it) and
+identifier.
+
+It's marked `HttpOnly` (JavaScript cannot read it) and
 `SameSite=Strict` (browsers refuse to send it from other sites). The
 cookie is dropped on logout, on emission restart, or after seven days
 of inactivity.
@@ -345,8 +384,7 @@ storage:
   torrents: ~/torrents
 client:
   name: transmission-4.0.6
-  min-speed: 50K
-  max-speed: 500K
+  bandwidth: 1M
   max-ratio: 2.0
 http:
   ui: true
@@ -361,7 +399,9 @@ log-level: info
 ```
 
 Env var mapping: `EMISSION_` prefix, dots and dashes → underscores.
-`--client.min-speed` = `EMISSION_CLIENT_MIN_SPEED`, `--http.port` = `EMISSION_HTTP_PORT`.
+
+`--client.bandwidth` = `EMISSION_CLIENT_BANDWIDTH`,
+`--http.port` = `EMISSION_HTTP_PORT`.
 
 ---
 
