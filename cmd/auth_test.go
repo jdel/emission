@@ -582,3 +582,102 @@ func TestAuthDeleteMeRemovesUser(t *testing.T) {
 		}
 	}
 }
+
+// stubUI is a minimal http.Handler that records when it ran, used to verify
+// the bootstrap routes fall through to the SPA vs. issue a redirect.
+type stubUI struct{ served bool }
+
+func (s *stubUI) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	s.served = true
+	w.WriteHeader(http.StatusOK)
+}
+
+// ── GET / and GET /start (bootstrap routing) ─────────────────────────────────
+
+// TestServeRootRedirectsToStartOnFreshInstall verifies that with auth on and
+// no credentials, GET / sends the operator to /start.
+func TestServeRootRedirectsToStartOnFreshInstall(t *testing.T) {
+	srv, _ := newAuthServer(t)
+	ui := &stubUI{}
+	w := httptest.NewRecorder()
+	srv.serveRoot(ui)(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/start" {
+		t.Errorf("Location = %q, want /start", loc)
+	}
+	if ui.served {
+		t.Error("SPA was served on /, expected redirect")
+	}
+}
+
+// TestServeRootServesSPAWhenUsersExist verifies that once any user is
+// registered, GET / falls through to the SPA — even during the bootstrap
+// window (admin reset scenario).
+func TestServeRootServesSPAWhenUsersExist(t *testing.T) {
+	srv, svc := newAuthServer(t)
+	if err := svc.SeedCredential(webauthn.Credential{ID: []byte("bob-d1")}, "bob", ""); err != nil {
+		t.Fatal(err)
+	}
+	ui := &stubUI{}
+	w := httptest.NewRecorder()
+	srv.serveRoot(ui)(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.Code == http.StatusFound {
+		t.Fatalf("got 302 to %q, expected SPA passthrough", w.Header().Get("Location"))
+	}
+	if !ui.served {
+		t.Error("SPA was not served on /")
+	}
+}
+
+// TestServeStartServesSPAWhileBootstrapOpen verifies that /start renders
+// the bootstrap page while the window is open.
+func TestServeStartServesSPAWhileBootstrapOpen(t *testing.T) {
+	srv, _ := newAuthServer(t)
+	ui := &stubUI{}
+	w := httptest.NewRecorder()
+	srv.serveStart(ui)(w, httptest.NewRequest(http.MethodGet, "/start", nil))
+	if w.Code == http.StatusFound {
+		t.Fatalf("got 302 to %q, expected SPA passthrough", w.Header().Get("Location"))
+	}
+	if !ui.served {
+		t.Error("SPA was not served on /start")
+	}
+}
+
+// TestServeStartRedirectsHomeWhenBootstrapClosed verifies that /start hides
+// itself once the bootstrap window has closed (e.g. admin already registered).
+func TestServeStartRedirectsHomeWhenBootstrapClosed(t *testing.T) {
+	srv, svc := newAuthServer(t)
+	if err := svc.SeedCredential(webauthn.Credential{ID: []byte("admin-d1")}, auth.AdminUsername, ""); err != nil {
+		t.Fatal(err)
+	}
+	ui := &stubUI{}
+	w := httptest.NewRecorder()
+	srv.serveStart(ui)(w, httptest.NewRequest(http.MethodGet, "/start", nil))
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/" {
+		t.Errorf("Location = %q, want /", loc)
+	}
+	if ui.served {
+		t.Error("SPA was served on /start with bootstrap closed")
+	}
+}
+
+// TestServeStartRedirectsHomeWhenAuthDisabled verifies that /start does not
+// expose a bootstrap page when auth is off.
+func TestServeStartRedirectsHomeWhenAuthDisabled(t *testing.T) {
+	srv := &server{}
+	ui := &stubUI{}
+	w := httptest.NewRecorder()
+	srv.serveStart(ui)(w, httptest.NewRequest(http.MethodGet, "/start", nil))
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/" {
+		t.Errorf("Location = %q, want /", loc)
+	}
+}
