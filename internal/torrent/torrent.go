@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/jdel/emission/internal/bencode"
@@ -30,15 +29,6 @@ type Meta struct {
 	// TruncatedTrackers is the number of tracker URLs dropped because the
 	// announce list exceeded maxAnnounceURLs. Zero means nothing was dropped.
 	TruncatedTrackers int
-}
-
-// FromFile reads and parses a .torrent file at path.
-func FromFile(path string) (*Meta, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return Parse(data)
 }
 
 // Parse decodes a bencoded .torrent and extracts metadata.
