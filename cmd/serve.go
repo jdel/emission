@@ -32,9 +32,9 @@ With --http.api, an HTTP API is served on --http.port; with --http.ui the
 web interface is served too (this implies --http.api). Seeding continues
 in the background whether or not the API is on.
 
-Each torrent reports an upload rate that scales with its leecher count up to
---client.max-speed bytes/sec, and the sum across one user's torrents is capped
-by their --client.bandwidth. Speed values accept K/M/G suffixes ("500K", "2M",
+Each torrent reports an upload rate that scales with its leecher count, and the
+sum across one user's torrents is capped by their --client.bandwidth (also each
+new torrent's default max). Speed values accept K/M/G suffixes ("500K", "2M",
 "1.5G"). All values are binary (K=1024). Trailing "B" and "/s" are accepted.`,
 		RunE: runServe,
 	}
@@ -71,10 +71,6 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	maxSpeed, err := parseMaxSpeed()
-	if err != nil {
-		return err
-	}
 	bandwidth, err := parseBandwidth()
 	if err != nil {
 		return err
@@ -95,7 +91,7 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 
 	log.Info().Str("version", c.Version).Str("peer_id", c.PeerID).Msg("client")
-	log.Info().Uint64("maxPerTorrent", maxSpeed).Uint64("userBandwidth", bandwidth).Msg("speed limits")
+	log.Info().Uint64("userBandwidth", bandwidth).Msg("speed limit")
 
 	mgr := seeder.New(c, torrentsDir, viper.GetFloat64("client.max-ratio"), viper.GetBool("client.autoremove"), bandwidth)
 
@@ -121,7 +117,6 @@ func runServe(_ *cobra.Command, _ []string) error {
 			addr:           fmt.Sprintf(":%d", viper.GetInt("http.port")),
 			torrentsDir:    torrentsDir,
 			withUI:         uiEnabled,
-			defMax:         maxSpeed,
 			auth:           authSvc,
 			publicURL:      viper.GetString("http.public-url"),
 			trustedProxies: viper.GetStringSlice("http.trusted-proxies"),
@@ -143,7 +138,7 @@ func runServe(_ *cobra.Command, _ []string) error {
 	}
 
 	// Watch the directory in the background; block until a signal arrives.
-	go watchDir(ctx, mgr, torrentsDir, maxSpeed)
+	go watchDir(ctx, mgr, torrentsDir)
 	<-ctx.Done()
 
 	log.Info().Msg("shutting down")
@@ -196,15 +191,6 @@ func setupAuth(apiEnabled bool) (*auth.Service, error) {
 	return svc, nil
 }
 
-// parseMaxSpeed resolves --client.max-speed into bytes/sec.
-func parseMaxSpeed() (uint64, error) {
-	max, err := units.ParseRate(viper.GetString("client.max-speed"))
-	if err != nil {
-		return 0, fmt.Errorf("client.max-speed: %w", err)
-	}
-	return max, nil
-}
-
 // parseBandwidth resolves --client.bandwidth (the default per-user upload
 // ceiling) into bytes/sec. It must be positive — unlimited is not allowed.
 func parseBandwidth() (uint64, error) {
@@ -221,7 +207,7 @@ func parseBandwidth() (uint64, error) {
 // watchDir recursively seeds every .torrent under root and watches the whole
 // tree for changes until ctx ends. The Manager owns torrent/file bookkeeping;
 // this loop only translates filesystem events into Manager calls.
-func watchDir(ctx context.Context, mgr *seeder.Manager, root string, maxSpeed uint64) {
+func watchDir(ctx context.Context, mgr *seeder.Manager, root string) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Error().Err(err).Str("path", root).Msg("cannot start watcher")
@@ -242,7 +228,7 @@ func watchDir(ctx context.Context, mgr *seeder.Manager, root string, maxSpeed ui
 					log.Error().Err(err).Str("path", path).Msg("cannot watch directory")
 				}
 			} else if isTorrentFile(d.Name()) {
-				_, _ = mgr.AddFile(path, maxSpeed)
+				_, _ = mgr.AddFile(path)
 			}
 			return nil
 		})
@@ -267,11 +253,11 @@ func watchDir(ctx context.Context, mgr *seeder.Manager, root string, maxSpeed ui
 				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 					watchTree(ev.Name)
 				} else if isTorrentFile(ev.Name) {
-					_, _ = mgr.AddFile(ev.Name, maxSpeed)
+					_, _ = mgr.AddFile(ev.Name)
 				}
 			case ev.Op&fsnotify.Write != 0:
 				if isTorrentFile(ev.Name) {
-					_, _ = mgr.AddFile(ev.Name, maxSpeed)
+					_, _ = mgr.AddFile(ev.Name)
 				}
 			case ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0:
 				if isTorrentFile(ev.Name) {

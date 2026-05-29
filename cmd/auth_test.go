@@ -237,7 +237,7 @@ func TestTorrentOwnershipSandbox(t *testing.T) {
 
 	// A torrent owned by alice (it lives under <dir>/alice/).
 	path := writeTorrent(t, filepath.Join(dir, "alice"), "movie", trackerURL)
-	st, err := srv.mgr.AddFile(path, 500)
+	st, err := srv.mgr.AddFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestTorrentVisibilitySandbox(t *testing.T) {
 
 	add := func(sub, name string) {
 		p := writeTorrent(t, filepath.Join(dir, sub), name, trackerURL)
-		if _, err := srv.mgr.AddFile(p, 500); err != nil {
+		if _, err := srv.mgr.AddFile(p); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -355,7 +355,7 @@ func TestWSVisibilitySandbox(t *testing.T) {
 
 	add := func(sub, name string) {
 		p := writeTorrent(t, filepath.Join(dir, sub), name, trackerURL)
-		if _, err := srv.mgr.AddFile(p, 500); err != nil {
+		if _, err := srv.mgr.AddFile(p); err != nil {
 			t.Fatal(err)
 		}
 	}

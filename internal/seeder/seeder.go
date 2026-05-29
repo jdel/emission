@@ -196,16 +196,18 @@ func (m *Manager) SetProfile(owner, name string) error {
 }
 
 // AddFile reads and parses the .torrent file at path and starts seeding it at a
-// leecher-scaled rate up to maxSpeed (bytes/sec), bounded by the owner's
-// bandwidth. The torrent's info hash is its ID; a torrent already loaded (same
-// hash) is rejected. path should be absolute.
-func (m *Manager) AddFile(path string, maxSpeed uint64) (Status, error) {
+// leecher-scaled rate up to the owner's bandwidth — or a per-torrent override
+// from the state file. The torrent's info hash is its ID; a torrent already
+// loaded (same hash) is rejected. path should be absolute.
+func (m *Manager) AddFile(path string) (Status, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return Status{}, err
 	}
-	// A state file next to the .torrent overrides the caller's defaults.
-	// Written at upload time or by SetClientOptions (live edits).
+	owner := Owner(m.relPath(abs))
+	// A state file next to the .torrent overrides the caller's defaults. Without
+	// one, a new torrent's max defaults to the owner's current bandwidth.
+	maxSpeed := m.settings.bandwidth(owner)
 	maxRatio := m.maxRatio
 	deleteOnCap := m.autoRemove
 	var addedAt time.Time
@@ -238,7 +240,6 @@ func (m *Manager) AddFile(path string, maxSpeed uint64) (Status, error) {
 	if _, dup := m.sessions[id]; dup {
 		return Status{}, fmt.Errorf("torrent already loaded: %s", meta.Name)
 	}
-	owner := Owner(m.relPath(abs))
 	cl, err := m.clientFor(owner)
 	if err != nil {
 		return Status{}, fmt.Errorf("client identity: %w", err)

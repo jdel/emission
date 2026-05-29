@@ -59,7 +59,7 @@ func TestManagerAddFileHappy(t *testing.T) {
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "alpha", srv.URL)
 
-	st, err := m.AddFile(path, 500)
+	st, err := m.AddFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +69,8 @@ func TestManagerAddFileHappy(t *testing.T) {
 	if st.SizeBytes != 1024 {
 		t.Errorf("size = %d, want 1024", st.SizeBytes)
 	}
-	if st.MaxRateBytesPerSec != 500 {
-		t.Errorf("max speed = %d, want 500", st.MaxRateBytesPerSec)
+	if st.MaxRateBytesPerSec != m.DefaultBandwidth() {
+		t.Errorf("max speed = %d, want default bandwidth %d", st.MaxRateBytesPerSec, m.DefaultBandwidth())
 	}
 	if !m.Exists(st.ID) {
 		t.Error("torrent missing after AddFile")
@@ -82,10 +82,10 @@ func TestManagerAddFileDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	if _, err := m.AddFile(path, 500); err != nil {
+	if _, err := m.AddFile(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.AddFile(path, 500); err == nil {
+	if _, err := m.AddFile(path); err == nil {
 		t.Error("duplicate AddFile should error")
 	}
 }
@@ -100,7 +100,7 @@ func TestManagerAddFileUsesStateFile(t *testing.T) {
 	if err := SaveStateFile(path, 1024, 1.5, 0, 0, false); err != nil {
 		t.Fatal(err)
 	}
-	st, err := m.AddFile(path, 2)
+	st, err := m.AddFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestManagerSetClientOptions(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 500)
+	st, _ := m.AddFile(path)
 
 	if err := m.SetClientOptions(st.ID, 1024, 2.0, false); err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ func TestManagerSetClientOptionsValidation(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 500)
+	st, _ := m.AddFile(path)
 
 	if err := m.SetClientOptions(st.ID, 500, -1, false); err == nil {
 		t.Error("negative ratio should error")
@@ -157,7 +157,7 @@ func TestManagerRemove(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 500)
+	st, _ := m.AddFile(path)
 
 	if err := m.Remove(st.ID); err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func TestManagerRemoveByPath(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestManager(t, dir)
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	st, _ := m.AddFile(path, 500)
+	st, _ := m.AddFile(path)
 
 	m.RemoveByPath(path)
 	if m.Exists(st.ID) {
@@ -206,8 +206,8 @@ func TestManagerRemoveUnder(t *testing.T) {
 	}
 	subPath := newTestTorrent(t, sub, "private", srv.URL)
 	rootPath := newTestTorrent(t, dir, "shared", srv.URL)
-	sub1, _ := m.AddFile(subPath, 500)
-	root1, _ := m.AddFile(rootPath, 500)
+	sub1, _ := m.AddFile(subPath)
+	root1, _ := m.AddFile(rootPath)
 
 	m.RemoveUnder(sub)
 	if m.Exists(sub1.ID) {
@@ -224,7 +224,7 @@ func TestManagerPageAndFilter(t *testing.T) {
 	m := newTestManager(t, dir)
 	for _, n := range []string{"alpha", "beta", "gamma"} {
 		path := newTestTorrent(t, dir, n, srv.URL)
-		if _, err := m.AddFile(path, 500); err != nil {
+		if _, err := m.AddFile(path); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -253,7 +253,7 @@ func TestManagerVisible(t *testing.T) {
 	m := newTestManager(t, dir)
 
 	rootPath := newTestTorrent(t, dir, "shared", srv.URL)
-	if _, err := m.AddFile(rootPath, 500); err != nil {
+	if _, err := m.AddFile(rootPath); err != nil {
 		t.Fatal(err)
 	}
 	aliceDir := filepath.Join(dir, "alice")
@@ -261,7 +261,7 @@ func TestManagerVisible(t *testing.T) {
 		t.Fatal(err)
 	}
 	alicePath := newTestTorrent(t, aliceDir, "secret", srv.URL)
-	if _, err := m.AddFile(alicePath, 500); err != nil {
+	if _, err := m.AddFile(alicePath); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,7 +289,7 @@ func TestManagerSubscribeFiresOnAdd(t *testing.T) {
 	defer cancel()
 
 	path := newTestTorrent(t, dir, "x", srv.URL)
-	if _, err := m.AddFile(path, 500); err != nil {
+	if _, err := m.AddFile(path); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -310,10 +310,10 @@ func TestManagerSubscribeCoalesces(t *testing.T) {
 	// should be silently dropped (channel depth 1).
 	p1 := newTestTorrent(t, dir, "a", srv.URL)
 	p2 := newTestTorrent(t, dir, "b", srv.URL)
-	if _, err := m.AddFile(p1, 500); err != nil {
+	if _, err := m.AddFile(p1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.AddFile(p2, 500); err != nil {
+	if _, err := m.AddFile(p2); err != nil {
 		t.Fatal(err)
 	}
 

@@ -43,7 +43,6 @@ var infoHashRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 type server struct {
 	mgr         *seeder.Manager
 	torrentsDir string // where uploaded .torrent files are written
-	defMax      uint64
 
 	auth             *auth.Service // nil when authentication is disabled
 	publicURL        string        // externally reachable base URL, for invite links
@@ -57,7 +56,6 @@ type httpOptions struct {
 	addr           string
 	torrentsDir    string
 	withUI         bool
-	defMax         uint64
 	tlsCert        string // empty = plain HTTP
 	tlsKey         string
 	auth           *auth.Service // nil = authentication disabled
@@ -72,7 +70,6 @@ func startHTTP(cancel context.CancelFunc, mgr *seeder.Manager, opts httpOptions)
 	srv := &server{
 		mgr:              mgr,
 		torrentsDir:      opts.torrentsDir,
-		defMax:           opts.defMax,
 		auth:             opts.auth,
 		publicURL:        opts.publicURL,
 		secure:           opts.tlsCert != "" || (opts.auth != nil && strings.HasPrefix(opts.publicURL, "https://")),
@@ -269,7 +266,8 @@ func (s *server) uploadTorrent(w http.ResponseWriter, r *http.Request) {
 	// Per-upload overrides are optional. When supplied, persist them in a
 	// state file next to the .torrent so the watcher's AddFile picks them
 	// up — and they survive a restart.
-	max, ratio, override, err := parseSpeedForm(r, s.defMax)
+	// A torrent with no explicit override follows the uploader's bandwidth.
+	max, ratio, override, err := parseSpeedForm(r, s.mgr.Bandwidth(s.uploader(r)))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -296,10 +294,11 @@ func (s *server) uploadTorrent(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseSpeedForm pulls optional max-speed / max-ratio values from a multipart
-// form, falling back to defMax (ratio defaults to 0 = unlimited). override is
-// true when at least one was explicitly provided by the client.
-func parseSpeedForm(r *http.Request, defMax uint64) (max uint64, ratio float64, override bool, err error) {
-	max = defMax
+// form, falling back to defaultMax when max-speed is omitted (ratio defaults to
+// 0 = unlimited). override is true when at least one was explicitly provided by
+// the client.
+func parseSpeedForm(r *http.Request, defaultMax uint64) (max uint64, ratio float64, override bool, err error) {
+	max = defaultMax
 	if v := r.FormValue("max-speed"); v != "" {
 		if max, err = units.ParseRate(v); err != nil {
 			return 0, 0, false, fmt.Errorf("max-speed: %w", err)
