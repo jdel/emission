@@ -20,6 +20,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Generate Swagger docs
+        run: go generate ./...
+
+      - name: Verify generated docs are committed
+        run: git diff --exit-code -- internal/docs
+
       - name: Build
         run: go build -v ./...
 

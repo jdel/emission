@@ -21,8 +21,9 @@ export CGO_ENABLED := 0
 
 all: build
 
-# Build the host binary.
-build: ui
+# Build the host binary. swagger runs first so embedded API docs always match
+# the handler annotations (go build never runs go generate on its own).
+build: swagger ui
 	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY) $(PKG)
 
 # Build the web UI into internal/web/dist so the Go binary can embed it.
@@ -45,7 +46,7 @@ vet:
 	go vet . ./cmd/... ./internal/...
 
 # Cross-compile matrix.
-dist: ui $(addprefix $(DIST)/,$(PLATFORMS_BIN))
+dist: swagger ui $(addprefix $(DIST)/,$(PLATFORMS_BIN))
 
 # Pattern target: dist/<os>/<arch>/<binary>[.exe]
 $(DIST)/%:
