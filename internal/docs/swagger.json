@@ -708,9 +708,6 @@
                 "authenticated": {
                     "type": "boolean"
                 },
-                "bootstrapAvailable": {
-                    "type": "boolean"
-                },
                 "username": {
                     "type": "string"
                 }

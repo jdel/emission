@@ -170,7 +170,6 @@ export interface AuthStatus {
   authEnabled: boolean // false = no auth configured, everything is open
   authenticated: boolean
   username?: string // the logged-in user, when authenticated
-  bootstrapAvailable?: boolean // admin-setup window is open
 }
 
 /** getAuthStatus reports whether auth is on and whether this client is in. */

@@ -62,10 +62,9 @@ type errorResponse struct {
 
 // authStatusResponse is the GET /api/auth/status response.
 type authStatusResponse struct {
-	AuthEnabled        bool   `json:"authEnabled"`
-	Authenticated      bool   `json:"authenticated"`
-	Username           string `json:"username,omitempty"`
-	BootstrapAvailable bool   `json:"bootstrapAvailable,omitempty"`
+	AuthEnabled   bool   `json:"authEnabled"`
+	Authenticated bool   `json:"authenticated"`
+	Username      string `json:"username,omitempty"`
 }
 
 // inviteBody is the POST /api/auth/register/begin request body.

@@ -250,7 +250,7 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
           <p className="text-primary text-lg font-medium">Drop .torrent files to add</p>
         </div>
       )}
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
+      <div className="mx-auto max-w-3xl px-4 pt-4 pb-8 sm:pt-6 sm:pb-12">
         <header className="bg-background/75 border-border/60 sticky top-0 z-10 -mx-4 mb-8 flex items-center justify-between border-b px-4 py-3 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <div className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-lg">

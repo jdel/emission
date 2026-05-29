@@ -715,9 +715,6 @@ const docTemplate = `{
                 "authenticated": {
                     "type": "boolean"
                 },
-                "bootstrapAvailable": {
-                    "type": "boolean"
-                },
                 "username": {
                     "type": "string"
                 }

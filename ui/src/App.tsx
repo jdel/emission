@@ -33,13 +33,21 @@ function App() {
   // cookie set).
   const notice = status.authEnabled ? <CookieNotice /> : null
 
+  // The bootstrap admin-registration screen lives at /start (server-gated:
+  // the route only renders the SPA while the bootstrap window is open). A
+  // logged-in user landing on it gets quietly sent home.
+  const onStart = window.location.pathname === '/start'
+  if (onStart && status.authenticated) {
+    window.history.replaceState({}, '', '/')
+  }
+
   if (status.authEnabled && !status.authenticated) {
     const invite = new URLSearchParams(window.location.search).get('invite')
-    // An invite link → register that user. Otherwise, during the startup
-    // window with no admin yet → register the admin. Else → log in.
+    // An invite link → register that user. /start → register the admin.
+    // Otherwise → log in.
     let screen
     if (invite) screen = <Register invite={invite} onDone={refresh} />
-    else if (status.bootstrapAvailable) screen = <Register invite="" onDone={refresh} />
+    else if (onStart) screen = <Register invite="" onDone={refresh} />
     else screen = <Login onDone={refresh} />
     return (
       <>

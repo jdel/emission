@@ -165,6 +165,12 @@ func newMux(srv *server, withUI bool, rl *rpsLimiter) *http.ServeMux {
 
 	if withUI {
 		if ui, ok := web.Handler(); ok {
+			// On a fresh install (auth on, no users yet), nudge the operator to
+			// the bootstrap page. /start itself only serves the SPA while the
+			// bootstrap window is still open — afterwards it 302s home, so the
+			// route doesn't advertise its purpose to regular users.
+			mux.HandleFunc("GET /{$}", srv.serveRoot(ui))
+			mux.HandleFunc("GET /start", srv.serveStart(ui))
 			mux.Handle("/", ui)
 		} else {
 			log.Warn().Msg("--http.ui set but UI not embedded in this binary; serving API only")

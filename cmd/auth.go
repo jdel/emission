@@ -35,10 +35,9 @@ func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	username, authed := s.sessionUsername(r)
 	writeJSON(w, http.StatusOK, authStatusResponse{
-		AuthEnabled:        true,
-		Authenticated:      authed,
-		Username:           username,
-		BootstrapAvailable: s.auth.BootstrapOpen(),
+		AuthEnabled:   true,
+		Authenticated: authed,
+		Username:      username,
 	})
 }
 
@@ -172,6 +171,32 @@ func (s *server) authInvite(w http.ResponseWriter, r *http.Request) {
 func (s *server) inviteRedirect(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	http.Redirect(w, r, "/?invite="+token, http.StatusFound)
+}
+
+// serveRoot is the GET / handler. When auth is on and no user is registered
+// yet (fresh install), it sends the operator to /start. Otherwise the SPA
+// serves the normal login or dashboard.
+func (s *server) serveRoot(ui http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.auth != nil && s.auth.BootstrapOpen() && s.auth.CredentialCount() == 0 {
+			http.Redirect(w, r, "/start", http.StatusFound)
+			return
+		}
+		ui.ServeHTTP(w, r)
+	}
+}
+
+// serveStart is the GET /start handler. While the bootstrap window is open
+// the SPA loads its admin-registration screen; once the window closes (or
+// auth is off) the route quietly 302s home so it does not advertise itself.
+func (s *server) serveStart(ui http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.auth == nil || !s.auth.BootstrapOpen() {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		ui.ServeHTTP(w, r)
+	}
 }
 
 // authMe lists the current user's own registered devices.

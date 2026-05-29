@@ -11,8 +11,6 @@ definitions:
         type: boolean
       authenticated:
         type: boolean
-      bootstrapAvailable:
-        type: boolean
       username:
         type: string
     type: object
