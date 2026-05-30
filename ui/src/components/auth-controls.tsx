@@ -1,11 +1,9 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
 import { ArrowLeft, Gauge, LogOut, Plus, Smartphone, Trash2, Users, UserPlus } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 
 import {
   ADMIN_USERNAME,
-  createInvite,
   deleteMyAccount,
   listMyDevices,
   logout,
@@ -23,6 +21,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { formatRelative } from '@/lib/format'
 import { ConfirmDialog, type ConfirmDialogProps } from '@/components/confirm-dialog'
+import { InvitePanel } from '@/components/invite-panel'
+import { useInvite } from '@/lib/invite'
 import { ManageUsers } from '@/components/manage-users'
 import { BandwidthDialog } from '@/components/bandwidth-dialog'
 
@@ -41,9 +41,7 @@ function MyDevices({ username, open, onOpenChange, onSignedOut }: MyDevicesProps
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState<'list' | 'newDevice'>('list')
-  const [inviteURL, setInviteURL] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
-  const [busy, setBusy] = useState(false)
+  const { url: inviteURL, code: inviteCode, busy, mint } = useInvite()
   const [pending, setPending] = useState<Omit<ConfirmDialogProps, 'open' | 'onOpenChange'> | null>(null)
 
   const refresh = useCallback(() => {
@@ -60,17 +58,7 @@ function MyDevices({ username, open, onOpenChange, onSignedOut }: MyDevicesProps
   }, [open, refresh])
 
   async function addDevice() {
-    setBusy(true)
-    try {
-      const { url, code } = await createInvite(username)
-      setInviteURL(url)
-      setInviteCode(code)
-      setView('newDevice')
-    } catch (e) {
-      toast.error(`Could not create invite: ${String(e)}`)
-    } finally {
-      setBusy(false)
-    }
+    if (await mint(username)) setView('newDevice')
   }
 
   function delDevice(id: string) {
@@ -139,25 +127,7 @@ function MyDevices({ username, open, onOpenChange, onSignedOut }: MyDevicesProps
         </DialogHeader>
 
         {view === 'newDevice' ? (
-          <div className="flex flex-col items-center gap-4">
-            <div className="rounded-lg bg-white p-3">
-              <QRCodeSVG value={inviteURL} size={184} />
-            </div>
-            <p className="text-center font-mono text-lg font-medium tracking-tight">{inviteCode}</p>
-            <div className="flex w-full gap-2">
-              <Input readOnly value={inviteURL} onFocus={(e) => e.target.select()} className="font-mono text-xs" />
-              <Button
-                onClick={() =>
-                  navigator.clipboard
-                    .writeText(inviteURL)
-                    .then(() => toast.success('Invite link copied'))
-                    .catch(() => toast.error('Could not copy — select the link manually'))
-                }
-              >
-                Copy
-              </Button>
-            </div>
-          </div>
+          <InvitePanel url={inviteURL} code={inviteCode} />
         ) : loading ? (
           <p className="text-muted-foreground py-6 text-center text-sm">Loading…</p>
         ) : (
@@ -206,10 +176,8 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
   function AuthControls({ username, onSignedOut }, ref) {
     const [phase, setPhase] = useState<Phase>('closed')
     const [askName, setAskName] = useState('')
-    const [inviteURL, setInviteURL] = useState('')
-    const [inviteCode, setInviteCode] = useState('')
+    const { url: inviteURL, code: inviteCode, busy, mint } = useInvite()
     const [inviteFor, setInviteFor] = useState('')
-    const [busy, setBusy] = useState(false)
     const [manageOpen, setManageOpen] = useState(false)
     const [myDevicesOpen, setMyDevicesOpen] = useState(false)
     const [myBandwidthOpen, setMyBandwidthOpen] = useState(false)
@@ -225,18 +193,10 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
     }))
 
     async function mintInvite(forUser: string, self = false) {
-      setBusy(true)
-      try {
-        const { url, code } = await createInvite(forUser)
-        setInviteURL(url)
-        setInviteCode(code)
+      if (await mint(forUser)) {
         setInviteFor(forUser)
         setIsSelf(self)
         setPhase('show')
-      } catch (e) {
-        toast.error(`Invite failed: ${String(e)}`)
-      } finally {
-        setBusy(false)
       }
     }
 
@@ -246,13 +206,6 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
       } finally {
         onSignedOut()
       }
-    }
-
-    function copy() {
-      navigator.clipboard
-        .writeText(inviteURL)
-        .then(() => toast.success('Invite link copied'))
-        .catch(() => toast.error('Could not copy — select the link manually'))
     }
 
     return (
@@ -358,23 +311,7 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
                       : 'Scan the QR code on the new device, share the link, or read the code aloud. One-time use, expires in 24 hours.'}
                   </DialogDescription>
                 </DialogHeader>
-                <div className="flex flex-col items-center gap-4">
-                  <div className="rounded-lg bg-white p-3">
-                    <QRCodeSVG value={inviteURL} size={184} />
-                  </div>
-                  <p className="text-center font-mono text-lg font-medium tracking-tight">
-                    {inviteCode}
-                  </p>
-                  <div className="flex w-full gap-2">
-                    <Input
-                      readOnly
-                      value={inviteURL}
-                      onFocus={(e) => e.target.select()}
-                      className="font-mono text-xs"
-                    />
-                    <Button onClick={copy}>Copy</Button>
-                  </div>
-                </div>
+                <InvitePanel url={inviteURL} code={inviteCode} />
               </>
             )}
           </DialogContent>

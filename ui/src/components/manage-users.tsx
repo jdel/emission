@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Gauge, List, Network, Ticket, Trash2, Users } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 
 import {
@@ -26,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog, type ConfirmDialogProps } from '@/components/confirm-dialog'
+import { InvitePanel } from '@/components/invite-panel'
 import { BandwidthDialog } from '@/components/bandwidth-dialog'
 
 // ownerOf returns the username that owns a torrent, from the first path segment
@@ -597,39 +597,10 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
                 aloud. One-time use, expires in {formatETA(resendInvite.expiresAt)}.
               </DialogDescription>
             </DialogHeader>
-            {(() => {
-              const url = `${window.location.origin}/r/${resendInvite.token}`
-              return (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="rounded-lg bg-white p-3">
-                    <QRCodeSVG value={url} size={184} />
-                  </div>
-                  <p className="text-center font-mono text-lg font-medium tracking-tight">
-                    {resendInvite.token}
-                  </p>
-                  <div className="flex w-full gap-2">
-                    <Input
-                      readOnly
-                      value={url}
-                      onFocus={(e) => e.target.select()}
-                      className="font-mono text-xs"
-                    />
-                    <Button
-                      onClick={() =>
-                        navigator.clipboard
-                          .writeText(url)
-                          .then(() => toast.success('Invite link copied'))
-                          .catch(() =>
-                            toast.error('Could not copy — select the link manually'),
-                          )
-                      }
-                    >
-                      Copy
-                    </Button>
-                  </div>
-                </div>
-              )
-            })()}
+            <InvitePanel
+              url={`${window.location.origin}/r/${resendInvite.token}`}
+              code={resendInvite.token}
+            />
           </DialogContent>
         </Dialog>
       )}

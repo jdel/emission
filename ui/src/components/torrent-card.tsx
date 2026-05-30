@@ -10,7 +10,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
-import { Checkbox, Tooltip } from 'radix-ui'
+import { Tooltip } from 'radix-ui'
 import { toast } from 'sonner'
 
 import { setClientOptions, type StatsPoint, type Torrent } from '@/lib/api'
@@ -18,6 +18,7 @@ import { formatBytes, formatDateTime, formatETA, formatRate, formatRateInput, fo
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogClose,
@@ -162,18 +163,11 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
               />
             </div>
             <div className="flex items-center gap-2.5">
-              <Checkbox.Root
+              <Checkbox
                 id={`doc-${torrent.id}`}
                 checked={deleteOnCapInput}
                 onCheckedChange={(v) => setDeleteOnCapInput(v === true)}
-                className="border-input bg-background data-[state=checked]:bg-primary data-[state=checked]:border-primary flex size-4 shrink-0 items-center justify-center rounded border shadow-sm"
-              >
-                <Checkbox.Indicator>
-                  <svg viewBox="0 0 10 10" className="size-3 fill-none stroke-white stroke-2">
-                    <path d="M2 5l2.5 2.5L8 3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </Checkbox.Indicator>
-              </Checkbox.Root>
+              />
               <Label htmlFor={`doc-${torrent.id}`} className="cursor-pointer font-normal">
                 Remove when capped
               </Label>
@@ -228,21 +222,21 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
               auto-remove
             </Badge>
           )}
-          <StatTip label="Uploaded">
+          <Tip label="Uploaded">
             <span className="text-muted-foreground w-20 text-right text-xs tabular-nums">
               {formatBytes(torrent.uploadedBytes)}
             </span>
-          </StatTip>
-          <StatTip label="Rate">
+          </Tip>
+          <Tip label="Rate">
             <span className="text-muted-foreground hidden w-24 text-right text-xs tabular-nums sm:block">
               {formatRate(smoothRate)}
             </span>
-          </StatTip>
-          <StatTip label="Ratio">
+          </Tip>
+          <Tip label="Ratio">
             <span className="text-muted-foreground hidden w-14 text-right text-xs tabular-nums sm:block">
               {currentRatio !== null ? currentRatio.toFixed(2) : '—'}
             </span>
-          </StatTip>
+          </Tip>
           <div className="flex shrink-0 items-center gap-0.5">
             <Button
               variant="ghost"
@@ -335,24 +329,11 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
 
       <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 py-4 sm:grid-cols-6">
         <Stat icon={<StatusDot state={torrentState} />} label="Status">
-          <Tooltip.Provider delayDuration={300}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <span className={`cursor-default ${stateConfig[torrentState].className}`}>
-                  {stateConfig[torrentState].label}
-                </span>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  sideOffset={4}
-                  className="bg-popover text-popover-foreground animate-in fade-in-0 zoom-in-95 z-50 rounded-md border px-3 py-1.5 text-xs shadow-md"
-                >
-                  {stateConfig[torrentState].tip}
-                  <Tooltip.Arrow className="fill-popover" />
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-          </Tooltip.Provider>
+          <Tip label={stateConfig[torrentState].tip}>
+            <span className={`cursor-default ${stateConfig[torrentState].className}`}>
+              {stateConfig[torrentState].label}
+            </span>
+          </Tip>
         </Stat>
         <Stat icon={<ArrowUp className="size-4" />} label="Uploaded">
           {formatBytes(torrent.uploadedBytes)}
@@ -579,7 +560,7 @@ function TorrentChart({ points }: { points: StatsPoint[] }) {
   )
 }
 
-function StatTip({ label, children }: { label: string; children: React.ReactNode }) {
+function Tip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Tooltip.Provider delayDuration={300}>
       <Tooltip.Root>
