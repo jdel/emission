@@ -65,16 +65,20 @@ release:
   prerelease: auto
 
 dockers_v2:
-  - use: buildx
+  - id: emission
     dockerfile: Dockerfile.goreleaser
-    image_templates:
-      - "ghcr.io/jdel/emission:{{ .Tag }}"
-      - "ghcr.io/jdel/emission:latest"
-    build_flag_templates:
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    images:
+      - "ghcr.io/jdel/emission"
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    flags:
       - "--pull"
-      - "--platform=linux/amd64,linux/arm64"
 
-homebrew:
+brews:
   - name: emission
     directory: Formula
     repository:

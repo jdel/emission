@@ -4,8 +4,9 @@ FROM alpine:3.21 AS certs
 RUN apk add --no-cache ca-certificates
 
 FROM scratch
+ARG TARGETPLATFORM
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY emission /emission
+COPY ${TARGETPLATFORM}/emission /emission
 
 ENV EMISSION_STORAGE_TORRENTS=/data/torrents \
     EMISSION_STORAGE_AUTH=/data/auth/auth.json
