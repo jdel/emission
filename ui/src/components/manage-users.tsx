@@ -12,7 +12,6 @@ import {
   revokeInvite,
   type Device,
   type PendingInvite,
-  type SeedingProfile,
 } from '@/lib/api'
 import { formatETA, formatRelative } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -315,7 +314,7 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
   const [showUsers, setShowUsers] = useState(true)
   const [showInvites, setShowInvites] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
-  const [bwUser, setBwUser] = useState<{ username: string; bytes: number; profile: SeedingProfile } | null>(null)
+  const [bwUser, setBwUser] = useState<{ username: string; bytes: number; halfSat: number } | null>(null)
   const [torrentCounts, setTorrentCounts] = useState<Record<string, number>>({})
 
   const refresh = useCallback(() => {
@@ -500,7 +499,7 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
                                   setBwUser({
                                     username,
                                     bytes: (groups.get(username) ?? [])[0]?.bandwidth ?? 0,
-                                    profile: (groups.get(username) ?? [])[0]?.profile ?? 'normal',
+                                    halfSat: (groups.get(username) ?? [])[0]?.halfSaturation ?? 4,
                                   })
                                 }
                               >
@@ -619,7 +618,7 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
           onOpenChange={(v) => { if (!v) setBwUser(null) }}
           username={bwUser.username}
           initialBytes={bwUser.bytes}
-          initialProfile={bwUser.profile}
+          initialHalfSat={bwUser.halfSat}
           onSaved={refresh}
         />
       )}

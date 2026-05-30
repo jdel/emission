@@ -155,7 +155,7 @@ func (m *Manager) clientFor(owner string) (*client.Client, error) {
 // in accumulateLoop), so the sum is consistent with every caller's own value.
 func (m *Manager) cappedRate(owner string, natural uint64) uint64 {
 	budget := m.settings.bandwidth(owner)
-	k := m.settings.profileK(owner)
+	halfSaturation := m.settings.profileHalfSaturation(owner)
 	var total uint64
 	m.mu.Lock()
 	for _, s := range m.sessions {
@@ -166,7 +166,7 @@ func (m *Manager) cappedRate(owner string, natural uint64) uint64 {
 		for _, ts := range s.trackers {
 			l += ts.leechers.Load()
 		}
-		total += naturalRate(s.maxSpeed.Load(), budget, l, k)
+		total += naturalRate(s.maxSpeed.Load(), budget, l, halfSaturation)
 	}
 	m.mu.Unlock()
 	if total == 0 || total <= budget {
@@ -187,12 +187,19 @@ func (m *Manager) SetBandwidth(owner string, bytesPerSec uint64) error {
 	return m.settings.setBandwidth(owner, bytesPerSec)
 }
 
-// Profile returns owner's seeding profile (stealth/normal/aggressive).
+// Profile returns the display name for owner's seeding curve
+// (stealth/normal/aggressive/custom).
 func (m *Manager) Profile(owner string) string { return m.settings.profileName(owner) }
 
-// SetProfile sets owner's seeding profile and persists it.
-func (m *Manager) SetProfile(owner, name string) error {
-	return m.settings.setProfile(owner, name)
+// HalfSaturation returns owner's seeding-curve half-saturation (leechers for
+// half speed).
+func (m *Manager) HalfSaturation(owner string) float64 {
+	return m.settings.profileHalfSaturation(owner)
+}
+
+// SetHalfSaturation sets owner's seeding-curve half-saturation and persists it.
+func (m *Manager) SetHalfSaturation(owner string, k float64) error {
+	return m.settings.setHalfSaturation(owner, k)
 }
 
 // AddFile reads and parses the .torrent file at path and starts seeding it at a
@@ -326,7 +333,7 @@ func (m *Manager) SetClientOptions(id string, maxSpeed uint64, maxRatio float64,
 	// Re-roll into the new ceiling immediately; the owner's proportional cap is
 	// applied by pickRateLoop on its next tick (cappedRate locks m.mu, which we
 	// hold here). naturalRate already clamps to the owner's bandwidth.
-	s.rate.Store(naturalRate(maxSpeed, m.settings.bandwidth(s.owner), leechers, m.settings.profileK(s.owner)))
+	s.rate.Store(naturalRate(maxSpeed, m.settings.bandwidth(s.owner), leechers, m.settings.profileHalfSaturation(s.owner)))
 	s.deleteOnCap.Store(deleteOnCap)
 	path := s.path
 	addedAtMs := s.addedAt.UnixMilli()

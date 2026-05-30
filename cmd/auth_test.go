@@ -102,8 +102,8 @@ func TestBandwidthPerUserAndAdmin(t *testing.T) {
 		return w.Code
 	}
 
-	// alice sets her own bandwidth + profile.
-	if code := putSelf(alice, `{"bandwidth":"2M","profile":"stealth"}`); code != http.StatusNoContent {
+	// alice sets her own bandwidth + curve (stealth = halfSaturation 10).
+	if code := putSelf(alice, `{"bandwidth":"2M","halfSaturation":10}`); code != http.StatusNoContent {
 		t.Fatalf("alice self PUT: %d", code)
 	}
 	if a := getBW(alice); a.Bandwidth != 2<<20 || a.Profile != "stealth" {
@@ -113,8 +113,8 @@ func TestBandwidthPerUserAndAdmin(t *testing.T) {
 	if b := getBW(bob); b.Profile != "normal" {
 		t.Errorf("bob profile = %q, want default normal", b.Profile)
 	}
-	// admin overrides bob's settings.
-	if code := putUser(admin, "bob", `{"bandwidth":"512K","profile":"aggressive"}`); code != http.StatusNoContent {
+	// admin overrides bob's settings (aggressive = halfSaturation 1).
+	if code := putUser(admin, "bob", `{"bandwidth":"512K","halfSaturation":1}`); code != http.StatusNoContent {
 		t.Fatalf("admin set bob: %d", code)
 	}
 	if b := getBW(bob); b.Bandwidth != 512<<10 || b.Profile != "aggressive" {

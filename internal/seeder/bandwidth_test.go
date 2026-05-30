@@ -45,31 +45,45 @@ func TestSettingsStoreProfile(t *testing.T) {
 	if got := s.profileName("alice"); got != profileNormal {
 		t.Errorf("default profile = %q, want normal", got)
 	}
-	if got := s.profileK("alice"); got != 3.33 {
-		t.Errorf("default k = %v, want 3.33", got)
+	if got := s.profileHalfSaturation("alice"); got != 4 {
+		t.Errorf("default k = %v, want 4", got)
 	}
-	if err := s.setProfile("alice", profileAggressive); err != nil {
+	if err := s.setHalfSaturation("alice", 1); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.profileK("alice"); got != 1 {
-		t.Errorf("aggressive k = %v, want 1", got)
+	if got := s.profileHalfSaturation("alice"); got != 1 {
+		t.Errorf("k = %v, want 1", got)
 	}
-	if err := s.setProfile("alice", "bogus"); err == nil {
-		t.Error("unknown profile must be rejected")
+	if got := s.profileName("alice"); got != profileAggressive {
+		t.Errorf("k=1 name = %q, want aggressive", got)
+	}
+	// A custom value keeps a "custom" display name.
+	if err := s.setHalfSaturation("alice", 5); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.profileName("alice"); got != "custom" {
+		t.Errorf("k=5 name = %q, want custom", got)
+	}
+	// Out-of-range values are rejected.
+	if err := s.setHalfSaturation("alice", 0.5); err == nil {
+		t.Error("k below range must be rejected")
+	}
+	if err := s.setHalfSaturation("alice", 11); err == nil {
+		t.Error("k above range must be rejected")
 	}
 }
 
 func TestProfileKFor(t *testing.T) {
 	cases := map[string]float64{
 		profileStealth:    10,
-		profileNormal:     3.33,
+		profileNormal:     4,
 		profileAggressive: 1,
-		"":                3.33, // unknown → normal
-		"bogus":           3.33,
+		"":                4, // unknown → normal
+		"bogus":           4,
 	}
 	for name, want := range cases {
-		if got := profileKFor(name); got != want {
-			t.Errorf("profileKFor(%q) = %v, want %v", name, got, want)
+		if got := halfSaturationForProfile(name); got != want {
+			t.Errorf("halfSaturationForProfile(%q) = %v, want %v", name, got, want)
 		}
 	}
 }
@@ -80,7 +94,7 @@ func TestSettingsStorePersists(t *testing.T) {
 	if err := s.setBandwidth("alice", 5<<20); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.setProfile("alice", profileStealth); err != nil {
+	if err := s.setHalfSaturation("alice", maxHalfSaturation); err != nil {
 		t.Fatal(err)
 	}
 	// A fresh store reading the same file must see both overrides; the default
@@ -116,7 +130,7 @@ func TestCappedRateScalesToBudget(t *testing.T) {
 	addFakeSession(m, "a", "alice", 10000, 10)
 	addFakeSession(m, "b", "alice", 10000, 10)
 
-	k := profileKFor(profileNormal)
+	k := halfSaturationForProfile(profileNormal)
 	natural := naturalRate(10000, 1000, 10, k)
 	r1 := m.cappedRate("alice", natural)
 	r2 := m.cappedRate("alice", natural)
@@ -138,7 +152,7 @@ func TestCappedRateSingleTorrentClampedToBandwidth(t *testing.T) {
 
 	addFakeSession(m, "a", "alice", 10<<20, 4) // max 10M, 4 leechers
 
-	k := profileKFor(profileNormal)
+	k := halfSaturationForProfile(profileNormal)
 	natural := naturalRate(10<<20, 1<<20, 4, k)
 	rate := m.cappedRate("alice", natural)
 
@@ -157,7 +171,7 @@ func TestCappedRateUnderBudgetUnchanged(t *testing.T) {
 	t.Cleanup(m.Shutdown)
 
 	addFakeSession(m, "a", "alice", 10000, 10)
-	natural := naturalRate(10000, 1<<30, 10, profileKFor(profileNormal))
+	natural := naturalRate(10000, 1<<30, 10, halfSaturationForProfile(profileNormal))
 	if got := m.cappedRate("alice", natural); got != natural {
 		t.Errorf("under-budget rate = %d, want unchanged %d", got, natural)
 	}

@@ -12,37 +12,57 @@ import (
 const userSettingsFileName = ".emission-users.json"
 
 // Seeding profiles control how steeply a torrent's reported rate ramps with its
-// leecher count: k is the leecher count at which it reaches half its max.
-// Smaller k ramps to max with fewer leechers (eager); larger k stays low until
-// the swarm is large (cautious).
+// leecher count: halfSaturation is the leecher count at which it reaches half
+// its max. A smaller value ramps to max with fewer leechers (eager); a larger
+// value stays low until the swarm is large (cautious).
 const (
-	profileStealth    = "stealth"    // k = 10: only ramps in big swarms
-	profileNormal     = "normal"     // k = 3.33: balanced (default)
-	profileAggressive = "aggressive" // k = 1: near-max on almost any demand
+	profileStealth    = "stealth"    // halfSaturation = 10: only ramps in big swarms
+	profileNormal     = "normal"     // halfSaturation = 4: balanced (default)
+	profileAggressive = "aggressive" // halfSaturation = 1: near-max on almost any demand
 )
 
-// profileKFor maps a profile name to its half-saturation constant k. Unknown or
-// empty names fall back to normal.
-func profileKFor(name string) float64 {
+// Half-saturation bounds for a custom seeding curve (in leechers). The named
+// presets all fall within this range.
+const (
+	minHalfSaturation    = 1
+	maxHalfSaturation    = 10
+	normalHalfSaturation = 4
+)
+
+// halfSaturationForProfile maps a legacy profile name to its half-saturation
+// constant, used to migrate older persisted settings. Unknown or empty names
+// fall back to normal.
+func halfSaturationForProfile(name string) float64 {
 	switch name {
 	case profileStealth:
-		return 10
+		return maxHalfSaturation
 	case profileAggressive:
-		return 1
+		return minHalfSaturation
 	default:
-		return 3.33 // normal
+		return normalHalfSaturation
 	}
 }
 
-// validProfile reports whether name is a known seeding profile.
-func validProfile(name string) bool {
-	return name == profileStealth || name == profileNormal || name == profileAggressive
+// profileNameFor derives a display name from a half-saturation value: the three
+// preset constants map to their names, anything else is "custom".
+func profileNameFor(k float64) string {
+	switch k {
+	case minHalfSaturation:
+		return profileAggressive
+	case maxHalfSaturation:
+		return profileStealth
+	case 0, normalHalfSaturation:
+		return profileNormal
+	default:
+		return "custom"
+	}
 }
 
 // userSettings is one owner's persisted seeding preferences.
 type userSettings struct {
-	Bandwidth uint64 `json:"bandwidth,omitempty"` // 0 = use the store default
-	Profile   string `json:"profile,omitempty"`   // "" = normal
+	Bandwidth      uint64  `json:"bandwidth,omitempty"`      // 0 = use the store default
+	HalfSaturation float64 `json:"halfSaturation,omitempty"` // 0 = normal; leechers for half speed
+	Profile        string  `json:"profile,omitempty"`        // legacy; migrated to HalfSaturation on load
 }
 
 // settingsStore holds per-owner seeding preferences (upload-bandwidth ceiling
@@ -62,6 +82,14 @@ func loadSettingsStore(path string, defBandwidth uint64) *settingsStore {
 	if data, err := os.ReadFile(path); err == nil {
 		var m map[string]userSettings
 		if json.Unmarshal(data, &m) == nil && m != nil {
+			// Migrate legacy profile names to a numeric half-saturation.
+			for owner, u := range m {
+				if u.HalfSaturation == 0 && u.Profile != "" {
+					u.HalfSaturation = halfSaturationForProfile(u.Profile)
+					u.Profile = ""
+					m[owner] = u
+				}
+			}
 			s.perUser = m
 		}
 	}
@@ -78,21 +106,22 @@ func (s *settingsStore) bandwidth(owner string) uint64 {
 	return s.defBandwidth
 }
 
-// profileK returns the half-saturation constant for owner's seeding profile.
-func (s *settingsStore) profileK(owner string) float64 {
+// profileHalfSaturation returns owner's half-saturation constant, defaulting to
+// normal when unset.
+func (s *settingsStore) profileHalfSaturation(owner string) float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return profileKFor(s.perUser[owner].Profile)
+	if k := s.perUser[owner].HalfSaturation; k > 0 {
+		return k
+	}
+	return normalHalfSaturation
 }
 
-// profileName returns owner's seeding profile, defaulting to normal.
+// profileName returns the display name for owner's seeding curve.
 func (s *settingsStore) profileName(owner string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if p := s.perUser[owner].Profile; validProfile(p) {
-		return p
-	}
-	return profileNormal
+	return profileNameFor(s.perUser[owner].HalfSaturation)
 }
 
 // setBandwidth records owner's ceiling and persists. Zero is rejected — a
@@ -110,14 +139,16 @@ func (s *settingsStore) setBandwidth(owner string, bytesPerSec uint64) error {
 	return s.save(snapshot)
 }
 
-// setProfile records owner's seeding profile and persists.
-func (s *settingsStore) setProfile(owner, name string) error {
-	if !validProfile(name) {
-		return fmt.Errorf("unknown seeding profile %q", name)
+// setHalfSaturation records owner's seeding-curve half-saturation (leechers for
+// half speed) and persists. The value must lie within the allowed bounds.
+func (s *settingsStore) setHalfSaturation(owner string, k float64) error {
+	if k < minHalfSaturation || k > maxHalfSaturation {
+		return fmt.Errorf("half-saturation must be between %d and %d leechers", minHalfSaturation, maxHalfSaturation)
 	}
 	s.mu.Lock()
 	u := s.perUser[owner]
-	u.Profile = name
+	u.HalfSaturation = k
+	u.Profile = ""
 	s.perUser[owner] = u
 	snapshot := s.snapshotLocked()
 	s.mu.Unlock()

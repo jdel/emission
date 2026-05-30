@@ -86,14 +86,17 @@ func TestBandwidthEndpoints(t *testing.T) {
 		t.Errorf("default profile = %q, want normal", info.Profile)
 	}
 
-	// PUT own → 2M + aggressive profile.
+	// PUT own → 2M + aggressive curve (halfSaturation 1).
 	rec = httptest.NewRecorder()
-	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"2M","profile":"aggressive"}`)))
+	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"2M","halfSaturation":1}`)))
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("PUT code %d body %s", rec.Code, rec.Body)
 	}
 	if got := mgr.Bandwidth(""); got != 2<<20 {
 		t.Errorf("after PUT, bandwidth = %d, want 2<<20", got)
+	}
+	if got := mgr.HalfSaturation(""); got != 1 {
+		t.Errorf("after PUT, halfSaturation = %v, want 1", got)
 	}
 	if got := mgr.Profile(""); got != "aggressive" {
 		t.Errorf("after PUT, profile = %q, want aggressive", got)
@@ -106,11 +109,11 @@ func TestBandwidthEndpoints(t *testing.T) {
 		t.Errorf("bad value code %d, want 400", rec.Code)
 	}
 
-	// PUT invalid profile → 400.
+	// PUT out-of-range half-saturation → 400.
 	rec = httptest.NewRecorder()
-	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"2M","profile":"bogus"}`)))
+	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"2M","halfSaturation":99}`)))
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("bad profile code %d, want 400", rec.Code)
+		t.Errorf("bad half-saturation code %d, want 400", rec.Code)
 	}
 }
 

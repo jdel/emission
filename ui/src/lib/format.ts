@@ -32,6 +32,19 @@ export function formatRateInput(n: number): string {
   return (v % 1 === 0 ? v.toString() : v.toFixed(1)) + units[i]
 }
 
+/**
+ * parseRateInput parses a short rate string (e.g. "2M", "500K", "1.5G") into
+ * bytes/sec using 1024-scaled units. Returns NaN when unparseable.
+ */
+export function parseRateInput(s: string): number {
+  const m = /^\s*([\d.]+)\s*([KMGT]?)\s*$/i.exec(s)
+  if (!m) return NaN
+  const n = Number(m[1])
+  if (!Number.isFinite(n)) return NaN
+  const exp = { '': 0, K: 1, M: 2, G: 3, T: 4 }[m[2].toUpperCase()] ?? 0
+  return n * 1024 ** exp
+}
+
 /** formatETA renders the gap until a future unix-ms timestamp, e.g. "29m 4s". */
 export function formatETA(atMs: number): string {
   const sec = Math.round((atMs - Date.now()) / 1000)

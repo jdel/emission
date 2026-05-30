@@ -378,9 +378,10 @@ func (s *server) updateTorrent(w http.ResponseWriter, r *http.Request) {
 func (s *server) getBandwidth(w http.ResponseWriter, r *http.Request) {
 	owner := s.uploader(r)
 	writeJSON(w, http.StatusOK, bandwidthInfo{
-		Bandwidth: s.mgr.Bandwidth(owner),
-		Default:   s.mgr.DefaultBandwidth(),
-		Profile:   s.mgr.Profile(owner),
+		Bandwidth:      s.mgr.Bandwidth(owner),
+		Default:        s.mgr.DefaultBandwidth(),
+		Profile:        s.mgr.Profile(owner),
+		HalfSaturation: s.mgr.HalfSaturation(owner),
 	})
 }
 
@@ -413,8 +414,8 @@ func (s *server) applyBandwidth(w http.ResponseWriter, r *http.Request, owner st
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if body.Profile != "" {
-		if err := s.mgr.SetProfile(owner, body.Profile); err != nil {
+	if body.HalfSaturation != nil {
+		if err := s.mgr.SetHalfSaturation(owner, *body.HalfSaturation); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

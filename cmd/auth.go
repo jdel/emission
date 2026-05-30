@@ -216,11 +216,12 @@ func (s *server) authMe(w http.ResponseWriter, r *http.Request) {
 	for _, c := range s.auth.Credentials() {
 		if c.Username == username {
 			out = append(out, deviceInfo{
-				ID:        base64.RawURLEncoding.EncodeToString(c.Credential.ID),
-				Username:  c.Username,
-				AddedAt:   c.AddedAt,
-				Bandwidth: s.mgr.Bandwidth(username),
-				Profile:   s.mgr.Profile(username),
+				ID:             base64.RawURLEncoding.EncodeToString(c.Credential.ID),
+				Username:       c.Username,
+				AddedAt:        c.AddedAt,
+				Bandwidth:      s.mgr.Bandwidth(username),
+				Profile:        s.mgr.Profile(username),
+				HalfSaturation: s.mgr.HalfSaturation(username),
 			})
 		}
 	}
@@ -311,12 +312,13 @@ func (s *server) authUsers(w http.ResponseWriter, r *http.Request) {
 	out := make([]deviceInfo, len(creds))
 	for i, c := range creds {
 		out[i] = deviceInfo{
-			ID:        base64.RawURLEncoding.EncodeToString(c.Credential.ID),
-			Username:  c.Username,
-			InvitedBy: c.InvitedBy,
-			AddedAt:   c.AddedAt,
-			Bandwidth: s.mgr.Bandwidth(c.Username),
-			Profile:   s.mgr.Profile(c.Username),
+			ID:             base64.RawURLEncoding.EncodeToString(c.Credential.ID),
+			Username:       c.Username,
+			InvitedBy:      c.InvitedBy,
+			AddedAt:        c.AddedAt,
+			Bandwidth:      s.mgr.Bandwidth(c.Username),
+			Profile:        s.mgr.Profile(c.Username),
+			HalfSaturation: s.mgr.HalfSaturation(c.Username),
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

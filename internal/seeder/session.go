@@ -152,8 +152,8 @@ func (s *session) pickRateLoop() {
 			}
 			if leechers > 0 {
 				bw := s.mgr.settings.bandwidth(s.owner)
-				k := s.mgr.settings.profileK(s.owner)
-				natural := naturalRate(s.maxSpeed.Load(), bw, leechers, k)
+				halfSaturation := s.mgr.settings.profileHalfSaturation(s.owner)
+				natural := naturalRate(s.maxSpeed.Load(), bw, leechers, halfSaturation)
 				s.rate.Store(s.mgr.cappedRate(s.owner, natural))
 			} else {
 				s.rate.Store(0)
@@ -426,9 +426,9 @@ func logAnnounce(name, url string, ev tracker.Event, resp *tracker.Response, err
 // --- small helpers ----------------------------------------------------------
 
 // pickRateWeighted selects a rate in [min, max] biased toward higher values
-// when leechers is large using a hyperbolic weight w = L/(L+k), k=3.33.
-// At 10 leechers w≈0.75; as leechers→∞ w→1.
-func pickRateWeighted(min, max uint64, leechers int64, k float64) uint64 {
+// when leechers is large using a hyperbolic weight w = L/(L+halfSaturation),
+// halfSaturation=3.33. At 10 leechers w≈0.75; as leechers→∞ w→1.
+func pickRateWeighted(min, max uint64, leechers int64, halfSaturation float64) uint64 {
 	if max <= min {
 		return min
 	}
@@ -436,7 +436,7 @@ func pickRateWeighted(min, max uint64, leechers int64, k float64) uint64 {
 	if l < 0 {
 		l = 0
 	}
-	w := l / (l + k)
+	w := l / (l + halfSaturation)
 	return uint64(float64(min) + w*float64(max-min))
 }
 
@@ -444,11 +444,11 @@ func pickRateWeighted(min, max uint64, leechers int64, k float64) uint64 {
 // to the lesser of its own maxSpeed and the owner's total bandwidth — a single
 // torrent can never target more than the user's whole pipe. The per-user
 // proportional cap (Manager.cappedRate) still applies across multiple torrents.
-func naturalRate(maxSpeed, bandwidth uint64, leechers int64, k float64) uint64 {
+func naturalRate(maxSpeed, bandwidth uint64, leechers int64, halfSaturation float64) uint64 {
 	if bandwidth < maxSpeed {
 		maxSpeed = bandwidth
 	}
-	return pickRateWeighted(0, maxSpeed, leechers, k)
+	return pickRateWeighted(0, maxSpeed, leechers, halfSaturation)
 }
 
 func minInterval(resp *tracker.Response) time.Duration {

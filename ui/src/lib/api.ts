@@ -127,40 +127,47 @@ export async function setClientOptions(
 
 // --- per-user upload bandwidth ---------------------------------------------
 
-/** SeedingProfile sets how steeply the rate ramps with leecher count. */
-export type SeedingProfile = 'stealth' | 'normal' | 'aggressive'
+/**
+ * SeedingProfile is the display name for a seeding curve. The first three are
+ * presets; 'custom' is reported when the half-saturation doesn't match one.
+ */
+export type SeedingProfile = 'stealth' | 'normal' | 'aggressive' | 'custom'
 
 export interface BandwidthInfo {
   bandwidth: number // bytes/sec
   default: number // server default, bytes/sec
   profile: SeedingProfile
+  halfSaturation: number // leechers for half speed
 }
 
-/** getBandwidth returns the current user's own bandwidth ceiling and profile. */
+/** getBandwidth returns the current user's own bandwidth ceiling and curve. */
 export async function getBandwidth(): Promise<BandwidthInfo> {
   const res = await request('/bandwidth')
   return (await res.json()) as BandwidthInfo
 }
 
-/** setBandwidth sets the current user's own bandwidth (e.g. "2M") and profile. */
-export async function setBandwidth(bandwidth: string, profile?: SeedingProfile): Promise<void> {
+/**
+ * setBandwidth sets the current user's own bandwidth (e.g. "2M"); halfSaturation
+ * (leechers for half speed) is left unchanged when omitted.
+ */
+export async function setBandwidth(bandwidth: string, halfSaturation?: number): Promise<void> {
   await request('/bandwidth', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bandwidth, profile }),
+    body: JSON.stringify({ bandwidth, halfSaturation }),
   })
 }
 
-/** setUserBandwidth sets any user's bandwidth and profile (admin only). */
+/** setUserBandwidth sets any user's bandwidth and curve (admin only). */
 export async function setUserBandwidth(
   username: string,
   bandwidth: string,
-  profile?: SeedingProfile,
+  halfSaturation?: number,
 ): Promise<void> {
   await request(`/auth/users/${encodeURIComponent(username)}/bandwidth`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bandwidth, profile }),
+    body: JSON.stringify({ bandwidth, halfSaturation }),
   })
 }
 
@@ -254,7 +261,8 @@ export interface Device {
   invitedBy?: string // who created the invite that enrolled this device
   addedAt: number // unix ms
   bandwidth: number // this user's upload ceiling, bytes/sec
-  profile: SeedingProfile // this user's seeding profile
+  profile: SeedingProfile // this user's seeding-curve display name
+  halfSaturation: number // leechers for half speed
 }
 
 /** listMyDevices returns the current user's own registered passkeys. */

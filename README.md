@@ -24,6 +24,24 @@ blend in with legitimate peers.
 - Clean "stopped" announce sent to each tracker on shutdown.
 - Reports `downloaded = torrent size` (complete seeder from day one).
 
+### How the rate is calculated
+
+Each torrent targets a fraction of its max upload rate based on how many
+leechers are in the swarm, using a hyperbolic curve:
+
+```
+rate = maxRate × L / (L + halfSaturation)
+```
+
+`L` is the leecher count and `halfSaturation` is the leecher count at which
+the rate reaches half of `maxRate`. A preset sets it — **stealth** = 10 (only
+ramps up in big swarms), **normal** = 4 (default), **aggressive** = 1 (near-max
+on almost any demand) — or you can pick any value in between. The rate climbs
+fast at first, then flattens
+as it approaches `maxRate` — it never quite reaches it. A ±20% jitter is applied
+each second so the traffic looks organic, and the per-user bandwidth ceiling
+caps the sum across all of that user's torrents.
+
 ![Screenshot](screenshot.png)
 
 ---
