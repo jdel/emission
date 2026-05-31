@@ -734,3 +734,19 @@ func TestServeStartRedirectsHomeWhenAuthDisabled(t *testing.T) {
 		t.Errorf("Location = %q, want /", loc)
 	}
 }
+
+// TestStartTrailingSlashRedirects verifies /start/ canonicalizes to /start
+// rather than falling through to the SPA catch-all (where the client-side path
+// check would miss the bootstrap screen).
+func TestStartTrailingSlashRedirects(t *testing.T) {
+	srv, _ := newAuthServer(t)
+	mux := newMux(srv, true, newRpsLimiter(newProxyTrust(nil)))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/start/", nil))
+	if w.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /start/ = %d, want 301", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "/start" {
+		t.Errorf("Location = %q, want /start", loc)
+	}
+}

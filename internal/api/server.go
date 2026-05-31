@@ -152,6 +152,12 @@ func newMux(srv *server, withUI bool, rl *rpsLimiter) *http.ServeMux {
 			// route doesn't advertise its purpose to regular users.
 			mux.HandleFunc("GET /{$}", srv.serveRoot(ui))
 			mux.HandleFunc("GET /start", srv.serveStart(ui))
+			// A trailing slash (/start/) would otherwise fall through to the SPA
+			// catch-all, where the client-side exact path check misses the
+			// bootstrap screen; canonicalize it to /start.
+			mux.HandleFunc("GET /start/{$}", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "/start", http.StatusMovedPermanently)
+			})
 			mux.Handle("/", ui)
 		} else {
 			log.Warn().Msg("--http.ui set but UI not embedded in this binary; serving API only")
