@@ -37,7 +37,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -62,7 +62,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.inviteRequest"
+                            "$ref": "#/definitions/api.inviteRequest"
                         }
                     }
                 ],
@@ -70,7 +70,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.inviteResponse"
+                            "$ref": "#/definitions/api.inviteResponse"
                         }
                     }
                 }
@@ -91,7 +91,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/cmd.pendingInvite"
+                                "$ref": "#/definitions/api.pendingInvite"
                             }
                         }
                     }
@@ -120,7 +120,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -139,7 +139,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.loginChallenge"
+                            "$ref": "#/definitions/api.loginChallenge"
                         }
                     }
                 }
@@ -170,7 +170,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.authResult"
+                            "$ref": "#/definitions/api.authResult"
                         }
                     }
                 }
@@ -204,7 +204,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/cmd.deviceInfo"
+                                "$ref": "#/definitions/api.deviceInfo"
                             }
                         }
                     }
@@ -244,7 +244,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -269,7 +269,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.inviteBody"
+                            "$ref": "#/definitions/api.inviteBody"
                         }
                     }
                 ],
@@ -277,7 +277,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.registerChallenge"
+                            "$ref": "#/definitions/api.registerChallenge"
                         }
                     }
                 }
@@ -308,7 +308,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.authResult"
+                            "$ref": "#/definitions/api.authResult"
                         }
                     }
                 }
@@ -327,7 +327,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.authStatusResponse"
+                            "$ref": "#/definitions/api.authStatusResponse"
                         }
                     }
                 }
@@ -348,7 +348,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/cmd.deviceInfo"
+                                "$ref": "#/definitions/api.deviceInfo"
                             }
                         }
                     }
@@ -377,7 +377,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -406,7 +406,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.bandwidthUpdate"
+                            "$ref": "#/definitions/api.bandwidthUpdate"
                         }
                     }
                 ],
@@ -417,13 +417,103 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/users/{username}/proxy": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get a user's tracker proxy (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username",
+                        "name": "username",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Set a user's tracker proxy (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username",
+                        "name": "username",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Proxy URL (empty = direct)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -442,7 +532,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.bandwidthInfo"
+                            "$ref": "#/definitions/api.bandwidthInfo"
                         }
                     }
                 }
@@ -462,7 +552,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.bandwidthUpdate"
+                            "$ref": "#/definitions/api.bandwidthUpdate"
                         }
                     }
                 ],
@@ -473,7 +563,60 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/proxy": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "proxy"
+                ],
+                "summary": "Get my tracker proxy",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "proxy"
+                ],
+                "summary": "Set my tracker proxy",
+                "parameters": [
+                    {
+                        "description": "Proxy URL (empty = direct)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -512,7 +655,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.pagedTorrents"
+                            "$ref": "#/definitions/api.pagedTorrents"
                         }
                     }
                 }
@@ -553,19 +696,19 @@ const docTemplate = `{
                     "202": {
                         "description": "Accepted",
                         "schema": {
-                            "$ref": "#/definitions/cmd.uploadResult"
+                            "$ref": "#/definitions/api.uploadResult"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -593,7 +736,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -620,7 +763,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.speedUpdate"
+                            "$ref": "#/definitions/api.speedUpdate"
                         }
                     }
                 ],
@@ -631,13 +774,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -674,13 +817,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -698,7 +841,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "cmd.authResult": {
+        "api.authResult": {
             "type": "object",
             "properties": {
                 "authenticated": {
@@ -706,7 +849,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.authStatusResponse": {
+        "api.authStatusResponse": {
             "type": "object",
             "properties": {
                 "authenticated": {
@@ -717,7 +860,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.bandwidthInfo": {
+        "api.bandwidthInfo": {
             "type": "object",
             "properties": {
                 "bandwidth": {
@@ -728,26 +871,30 @@ const docTemplate = `{
                     "description": "server default, bytes/sec",
                     "type": "integer"
                 },
+                "halfSaturation": {
+                    "description": "leechers for half speed",
+                    "type": "number"
+                },
                 "profile": {
-                    "description": "seeding profile: stealth|normal|aggressive",
+                    "description": "display name: stealth|normal|aggressive|custom",
                     "type": "string"
                 }
             }
         },
-        "cmd.bandwidthUpdate": {
+        "api.bandwidthUpdate": {
             "type": "object",
             "properties": {
                 "bandwidth": {
                     "description": "e.g. \"2M\"",
                     "type": "string"
                 },
-                "profile": {
-                    "description": "stealth|normal|aggressive",
-                    "type": "string"
+                "halfSaturation": {
+                    "description": "leechers for half speed",
+                    "type": "number"
                 }
             }
         },
-        "cmd.deviceInfo": {
+        "api.deviceInfo": {
             "type": "object",
             "properties": {
                 "addedAt": {
@@ -756,6 +903,10 @@ const docTemplate = `{
                 "bandwidth": {
                     "description": "this user's upload ceiling, bytes/sec",
                     "type": "integer"
+                },
+                "halfSaturation": {
+                    "description": "leechers for half speed",
+                    "type": "number"
                 },
                 "id": {
                     "description": "base64url credential id",
@@ -766,7 +917,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "profile": {
-                    "description": "this user's seeding profile",
+                    "description": "this user's seeding-curve display name",
                     "type": "string"
                 },
                 "username": {
@@ -774,7 +925,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.errorResponse": {
+        "api.errorResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -782,7 +933,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.inviteBody": {
+        "api.inviteBody": {
             "type": "object",
             "properties": {
                 "invite": {
@@ -790,7 +941,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.inviteRequest": {
+        "api.inviteRequest": {
             "type": "object",
             "properties": {
                 "username": {
@@ -798,7 +949,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.inviteResponse": {
+        "api.inviteResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -809,7 +960,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.loginChallenge": {
+        "api.loginChallenge": {
             "type": "object",
             "properties": {
                 "ceremonyId": {
@@ -820,7 +971,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.pagedTorrents": {
+        "api.pagedTorrents": {
             "type": "object",
             "properties": {
                 "items": {
@@ -834,7 +985,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.pendingInvite": {
+        "api.pendingInvite": {
             "type": "object",
             "properties": {
                 "createdBy": {
@@ -852,7 +1003,36 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.registerChallenge": {
+        "api.proxyInfo": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "description": "server default (--client.proxy), \"\" if none",
+                    "type": "string"
+                },
+                "error": {
+                    "description": "probe error when status is \"error\"",
+                    "type": "string"
+                },
+                "proxy": {
+                    "description": "effective proxy URL (\"\" = announce directly)",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "\"ok\" | \"error\" | \"direct\" | \"unknown\"",
+                    "type": "string"
+                }
+            }
+        },
+        "api.proxyUpdate": {
+            "type": "object",
+            "properties": {
+                "proxy": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.registerChallenge": {
             "type": "object",
             "properties": {
                 "ceremonyId": {
@@ -866,7 +1046,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.speedUpdate": {
+        "api.speedUpdate": {
             "type": "object",
             "properties": {
                 "deleteOnCap": {
@@ -880,7 +1060,7 @@ const docTemplate = `{
                 }
             }
         },
-        "cmd.uploadResult": {
+        "api.uploadResult": {
             "type": "object",
             "properties": {
                 "id": {

@@ -30,7 +30,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -55,7 +55,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.inviteRequest"
+                            "$ref": "#/definitions/api.inviteRequest"
                         }
                     }
                 ],
@@ -63,7 +63,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.inviteResponse"
+                            "$ref": "#/definitions/api.inviteResponse"
                         }
                     }
                 }
@@ -84,7 +84,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/cmd.pendingInvite"
+                                "$ref": "#/definitions/api.pendingInvite"
                             }
                         }
                     }
@@ -113,7 +113,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -132,7 +132,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.loginChallenge"
+                            "$ref": "#/definitions/api.loginChallenge"
                         }
                     }
                 }
@@ -163,7 +163,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.authResult"
+                            "$ref": "#/definitions/api.authResult"
                         }
                     }
                 }
@@ -197,7 +197,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/cmd.deviceInfo"
+                                "$ref": "#/definitions/api.deviceInfo"
                             }
                         }
                     }
@@ -237,7 +237,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -262,7 +262,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.inviteBody"
+                            "$ref": "#/definitions/api.inviteBody"
                         }
                     }
                 ],
@@ -270,7 +270,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.registerChallenge"
+                            "$ref": "#/definitions/api.registerChallenge"
                         }
                     }
                 }
@@ -301,7 +301,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.authResult"
+                            "$ref": "#/definitions/api.authResult"
                         }
                     }
                 }
@@ -320,7 +320,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.authStatusResponse"
+                            "$ref": "#/definitions/api.authStatusResponse"
                         }
                     }
                 }
@@ -341,7 +341,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/cmd.deviceInfo"
+                                "$ref": "#/definitions/api.deviceInfo"
                             }
                         }
                     }
@@ -370,7 +370,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -399,7 +399,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.bandwidthUpdate"
+                            "$ref": "#/definitions/api.bandwidthUpdate"
                         }
                     }
                 ],
@@ -410,13 +410,103 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/users/{username}/proxy": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get a user's tracker proxy (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username",
+                        "name": "username",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Set a user's tracker proxy (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username",
+                        "name": "username",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Proxy URL (empty = direct)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -435,7 +525,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.bandwidthInfo"
+                            "$ref": "#/definitions/api.bandwidthInfo"
                         }
                     }
                 }
@@ -455,7 +545,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.bandwidthUpdate"
+                            "$ref": "#/definitions/api.bandwidthUpdate"
                         }
                     }
                 ],
@@ -466,7 +556,60 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/proxy": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "proxy"
+                ],
+                "summary": "Get my tracker proxy",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "proxy"
+                ],
+                "summary": "Set my tracker proxy",
+                "parameters": [
+                    {
+                        "description": "Proxy URL (empty = direct)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.proxyInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -505,7 +648,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd.pagedTorrents"
+                            "$ref": "#/definitions/api.pagedTorrents"
                         }
                     }
                 }
@@ -546,19 +689,19 @@
                     "202": {
                         "description": "Accepted",
                         "schema": {
-                            "$ref": "#/definitions/cmd.uploadResult"
+                            "$ref": "#/definitions/api.uploadResult"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -586,7 +729,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -613,7 +756,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd.speedUpdate"
+                            "$ref": "#/definitions/api.speedUpdate"
                         }
                     }
                 ],
@@ -624,13 +767,13 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -667,13 +810,13 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/cmd.errorResponse"
+                            "$ref": "#/definitions/api.errorResponse"
                         }
                     }
                 }
@@ -691,7 +834,7 @@
         }
     },
     "definitions": {
-        "cmd.authResult": {
+        "api.authResult": {
             "type": "object",
             "properties": {
                 "authenticated": {
@@ -699,7 +842,7 @@
                 }
             }
         },
-        "cmd.authStatusResponse": {
+        "api.authStatusResponse": {
             "type": "object",
             "properties": {
                 "authenticated": {
@@ -710,7 +853,7 @@
                 }
             }
         },
-        "cmd.bandwidthInfo": {
+        "api.bandwidthInfo": {
             "type": "object",
             "properties": {
                 "bandwidth": {
@@ -721,26 +864,30 @@
                     "description": "server default, bytes/sec",
                     "type": "integer"
                 },
+                "halfSaturation": {
+                    "description": "leechers for half speed",
+                    "type": "number"
+                },
                 "profile": {
-                    "description": "seeding profile: stealth|normal|aggressive",
+                    "description": "display name: stealth|normal|aggressive|custom",
                     "type": "string"
                 }
             }
         },
-        "cmd.bandwidthUpdate": {
+        "api.bandwidthUpdate": {
             "type": "object",
             "properties": {
                 "bandwidth": {
                     "description": "e.g. \"2M\"",
                     "type": "string"
                 },
-                "profile": {
-                    "description": "stealth|normal|aggressive",
-                    "type": "string"
+                "halfSaturation": {
+                    "description": "leechers for half speed",
+                    "type": "number"
                 }
             }
         },
-        "cmd.deviceInfo": {
+        "api.deviceInfo": {
             "type": "object",
             "properties": {
                 "addedAt": {
@@ -749,6 +896,10 @@
                 "bandwidth": {
                     "description": "this user's upload ceiling, bytes/sec",
                     "type": "integer"
+                },
+                "halfSaturation": {
+                    "description": "leechers for half speed",
+                    "type": "number"
                 },
                 "id": {
                     "description": "base64url credential id",
@@ -759,7 +910,7 @@
                     "type": "string"
                 },
                 "profile": {
-                    "description": "this user's seeding profile",
+                    "description": "this user's seeding-curve display name",
                     "type": "string"
                 },
                 "username": {
@@ -767,7 +918,7 @@
                 }
             }
         },
-        "cmd.errorResponse": {
+        "api.errorResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -775,7 +926,7 @@
                 }
             }
         },
-        "cmd.inviteBody": {
+        "api.inviteBody": {
             "type": "object",
             "properties": {
                 "invite": {
@@ -783,7 +934,7 @@
                 }
             }
         },
-        "cmd.inviteRequest": {
+        "api.inviteRequest": {
             "type": "object",
             "properties": {
                 "username": {
@@ -791,7 +942,7 @@
                 }
             }
         },
-        "cmd.inviteResponse": {
+        "api.inviteResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -802,7 +953,7 @@
                 }
             }
         },
-        "cmd.loginChallenge": {
+        "api.loginChallenge": {
             "type": "object",
             "properties": {
                 "ceremonyId": {
@@ -813,7 +964,7 @@
                 }
             }
         },
-        "cmd.pagedTorrents": {
+        "api.pagedTorrents": {
             "type": "object",
             "properties": {
                 "items": {
@@ -827,7 +978,7 @@
                 }
             }
         },
-        "cmd.pendingInvite": {
+        "api.pendingInvite": {
             "type": "object",
             "properties": {
                 "createdBy": {
@@ -845,7 +996,36 @@
                 }
             }
         },
-        "cmd.registerChallenge": {
+        "api.proxyInfo": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "description": "server default (--client.proxy), \"\" if none",
+                    "type": "string"
+                },
+                "error": {
+                    "description": "probe error when status is \"error\"",
+                    "type": "string"
+                },
+                "proxy": {
+                    "description": "effective proxy URL (\"\" = announce directly)",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "\"ok\" | \"error\" | \"direct\" | \"unknown\"",
+                    "type": "string"
+                }
+            }
+        },
+        "api.proxyUpdate": {
+            "type": "object",
+            "properties": {
+                "proxy": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.registerChallenge": {
             "type": "object",
             "properties": {
                 "ceremonyId": {
@@ -859,7 +1039,7 @@
                 }
             }
         },
-        "cmd.speedUpdate": {
+        "api.speedUpdate": {
             "type": "object",
             "properties": {
                 "deleteOnCap": {
@@ -873,7 +1053,7 @@
                 }
             }
         },
-        "cmd.uploadResult": {
+        "api.uploadResult": {
             "type": "object",
             "properties": {
                 "id": {

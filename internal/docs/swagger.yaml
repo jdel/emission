@@ -1,18 +1,18 @@
 basePath: /
 definitions:
-  cmd.authResult:
+  api.authResult:
     properties:
       authenticated:
         type: boolean
     type: object
-  cmd.authStatusResponse:
+  api.authStatusResponse:
     properties:
       authenticated:
         type: boolean
       username:
         type: string
     type: object
-  cmd.bandwidthInfo:
+  api.bandwidthInfo:
     properties:
       bandwidth:
         description: bytes/sec
@@ -20,26 +20,32 @@ definitions:
       default:
         description: server default, bytes/sec
         type: integer
+      halfSaturation:
+        description: leechers for half speed
+        type: number
       profile:
-        description: 'seeding profile: stealth|normal|aggressive'
+        description: 'display name: stealth|normal|aggressive|custom'
         type: string
     type: object
-  cmd.bandwidthUpdate:
+  api.bandwidthUpdate:
     properties:
       bandwidth:
         description: e.g. "2M"
         type: string
-      profile:
-        description: stealth|normal|aggressive
-        type: string
+      halfSaturation:
+        description: leechers for half speed
+        type: number
     type: object
-  cmd.deviceInfo:
+  api.deviceInfo:
     properties:
       addedAt:
         type: integer
       bandwidth:
         description: this user's upload ceiling, bytes/sec
         type: integer
+      halfSaturation:
+        description: leechers for half speed
+        type: number
       id:
         description: base64url credential id
         type: string
@@ -47,41 +53,41 @@ definitions:
         description: empty for the bootstrap admin
         type: string
       profile:
-        description: this user's seeding profile
+        description: this user's seeding-curve display name
         type: string
       username:
         type: string
     type: object
-  cmd.errorResponse:
+  api.errorResponse:
     properties:
       error:
         type: string
     type: object
-  cmd.inviteBody:
+  api.inviteBody:
     properties:
       invite:
         type: string
     type: object
-  cmd.inviteRequest:
+  api.inviteRequest:
     properties:
       username:
         type: string
     type: object
-  cmd.inviteResponse:
+  api.inviteResponse:
     properties:
       code:
         type: string
       url:
         type: string
     type: object
-  cmd.loginChallenge:
+  api.loginChallenge:
     properties:
       ceremonyId:
         type: string
       options:
         $ref: '#/definitions/protocol.CredentialAssertion'
     type: object
-  cmd.pagedTorrents:
+  api.pagedTorrents:
     properties:
       items:
         items:
@@ -90,7 +96,7 @@ definitions:
       total:
         type: integer
     type: object
-  cmd.pendingInvite:
+  api.pendingInvite:
     properties:
       createdBy:
         type: string
@@ -102,7 +108,27 @@ definitions:
       username:
         type: string
     type: object
-  cmd.registerChallenge:
+  api.proxyInfo:
+    properties:
+      default:
+        description: server default (--client.proxy), "" if none
+        type: string
+      error:
+        description: probe error when status is "error"
+        type: string
+      proxy:
+        description: effective proxy URL ("" = announce directly)
+        type: string
+      status:
+        description: '"ok" | "error" | "direct" | "unknown"'
+        type: string
+    type: object
+  api.proxyUpdate:
+    properties:
+      proxy:
+        type: string
+    type: object
+  api.registerChallenge:
     properties:
       ceremonyId:
         type: string
@@ -111,7 +137,7 @@ definitions:
       username:
         type: string
     type: object
-  cmd.speedUpdate:
+  api.speedUpdate:
     properties:
       deleteOnCap:
         type: boolean
@@ -120,7 +146,7 @@ definitions:
       maxSpeed:
         type: string
     type: object
-  cmd.uploadResult:
+  api.uploadResult:
     properties:
       id:
         type: string
@@ -543,7 +569,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Remove a passkey (admin only)
       tags:
       - admin
@@ -557,14 +583,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/cmd.inviteRequest'
+          $ref: '#/definitions/api.inviteRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.inviteResponse'
+            $ref: '#/definitions/api.inviteResponse'
       summary: Create an invite link
       tags:
       - auth
@@ -577,7 +603,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/cmd.pendingInvite'
+              $ref: '#/definitions/api.pendingInvite'
             type: array
       summary: List pending invites (admin only)
       tags:
@@ -596,7 +622,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Revoke a pending invite (admin only)
       tags:
       - admin
@@ -608,7 +634,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.loginChallenge'
+            $ref: '#/definitions/api.loginChallenge'
       summary: Begin passkey login
       tags:
       - auth
@@ -628,7 +654,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.authResult'
+            $ref: '#/definitions/api.authResult'
       summary: Finish passkey login
       tags:
       - auth
@@ -656,7 +682,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/cmd.deviceInfo'
+              $ref: '#/definitions/api.deviceInfo'
             type: array
       summary: List my devices
       tags:
@@ -675,7 +701,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Remove one of my devices
       tags:
       - auth
@@ -689,14 +715,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/cmd.inviteBody'
+          $ref: '#/definitions/api.inviteBody'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.registerChallenge'
+            $ref: '#/definitions/api.registerChallenge'
       summary: Begin passkey registration
       tags:
       - auth
@@ -716,7 +742,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.authResult'
+            $ref: '#/definitions/api.authResult'
       summary: Finish passkey registration
       tags:
       - auth
@@ -728,7 +754,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.authStatusResponse'
+            $ref: '#/definitions/api.authStatusResponse'
       summary: Authentication status
       tags:
       - auth
@@ -741,7 +767,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/cmd.deviceInfo'
+              $ref: '#/definitions/api.deviceInfo'
             type: array
       summary: List registered devices (admin only)
       tags:
@@ -760,7 +786,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Remove a user and their torrents (admin only)
       tags:
       - admin
@@ -779,19 +805,78 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/cmd.bandwidthUpdate'
+          $ref: '#/definitions/api.bandwidthUpdate'
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Set a user's upload bandwidth (admin only)
+      tags:
+      - admin
+  /api/auth/users/{username}/proxy:
+    get:
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.proxyInfo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorResponse'
+      summary: Get a user's tracker proxy (admin only)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      - description: Proxy URL (empty = direct)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.proxyUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.proxyInfo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorResponse'
+      summary: Set a user's tracker proxy (admin only)
       tags:
       - admin
   /api/bandwidth:
@@ -802,7 +887,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.bandwidthInfo'
+            $ref: '#/definitions/api.bandwidthInfo'
       summary: Get my upload bandwidth
       tags:
       - bandwidth
@@ -815,17 +900,51 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/cmd.bandwidthUpdate'
+          $ref: '#/definitions/api.bandwidthUpdate'
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Set my upload bandwidth
       tags:
       - bandwidth
+  /api/proxy:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.proxyInfo'
+      summary: Get my tracker proxy
+      tags:
+      - proxy
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Proxy URL (empty = direct)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.proxyUpdate'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.proxyInfo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorResponse'
+      summary: Set my tracker proxy
+      tags:
+      - proxy
   /api/torrents:
     get:
       parameters:
@@ -847,7 +966,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd.pagedTorrents'
+            $ref: '#/definitions/api.pagedTorrents'
       summary: List torrents
       tags:
       - torrents
@@ -874,15 +993,15 @@ paths:
         "202":
           description: Accepted
           schema:
-            $ref: '#/definitions/cmd.uploadResult'
+            $ref: '#/definitions/api.uploadResult'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Upload a .torrent file
       tags:
       - torrents
@@ -900,7 +1019,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Remove a torrent
       tags:
       - torrents
@@ -918,18 +1037,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/cmd.speedUpdate'
+          $ref: '#/definitions/api.speedUpdate'
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Update torrent upload speed
       tags:
       - torrents
@@ -953,11 +1072,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/cmd.errorResponse'
+            $ref: '#/definitions/api.errorResponse'
       summary: Get torrent stats history
       tags:
       - torrents

@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/jdel/emission/internal/api"
 	"github.com/jdel/emission/internal/auth"
 	"github.com/jdel/emission/internal/client"
 	"github.com/jdel/emission/internal/seeder"
@@ -118,13 +119,13 @@ func runServe(_ *cobra.Command, _ []string) error {
 
 	var shutdownHTTP func()
 	if apiEnabled {
-		opts := httpOptions{
-			addr:           fmt.Sprintf(":%d", viper.GetInt("http.port")),
-			torrentsDir:    torrentsDir,
-			withUI:         uiEnabled,
-			auth:           authSvc,
-			publicURL:      viper.GetString("http.public-url"),
-			trustedProxies: viper.GetStringSlice("http.trusted-proxies"),
+		opts := api.Options{
+			Addr:           fmt.Sprintf(":%d", viper.GetInt("http.port")),
+			TorrentsDir:    torrentsDir,
+			WithUI:         uiEnabled,
+			Auth:           authSvc,
+			PublicURL:      viper.GetString("http.public-url"),
+			TrustedProxies: viper.GetStringSlice("http.trusted-proxies"),
 		}
 		if viper.GetBool("http.tls.enabled") {
 			cert := viper.GetString("http.tls.cert")
@@ -137,9 +138,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 					return fmt.Errorf("tls: %w", err)
 				}
 			}
-			opts.tlsCert, opts.tlsKey = cert, key
+			opts.TLSCert, opts.TLSKey = cert, key
 		}
-		shutdownHTTP = startHTTP(cancel, mgr, opts)
+		shutdownHTTP = api.Start(cancel, mgr, opts)
 	}
 
 	// Watch the directory in the background; block until a signal arrives.
