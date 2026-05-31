@@ -712,16 +712,26 @@ func (m *Manager) Get(id string) (Status, bool) {
 
 // Page returns a filtered, paginated slice of the torrents visible to viewer
 // and the total count after filtering. query is a case-insensitive substring
-// matched against the torrent name; an empty query matches all. limit <= 0
-// returns every torrent from offset onward. offset past the end is an empty
-// page.
-func (m *Manager) Page(offset, limit int, query, viewer string) (items []Status, total int) {
+// matched against the torrent name; an empty query matches all. owner, when
+// non-empty, keeps only torrents owned by that user (empty matches all). limit
+// <= 0 returns every torrent from offset onward. offset past the end is an
+// empty page.
+func (m *Manager) Page(offset, limit int, query, viewer, owner string) (items []Status, total int) {
 	all := m.Visible(viewer)
 	if query != "" {
 		q := strings.ToLower(query)
 		filtered := make([]Status, 0, len(all))
 		for _, s := range all {
 			if strings.Contains(strings.ToLower(s.Name), q) {
+				filtered = append(filtered, s)
+			}
+		}
+		all = filtered
+	}
+	if owner != "" {
+		filtered := make([]Status, 0, len(all))
+		for _, s := range all {
+			if Owner(s.Location) == owner {
 				filtered = append(filtered, s)
 			}
 		}

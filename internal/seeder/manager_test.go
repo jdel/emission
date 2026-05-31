@@ -229,21 +229,37 @@ func TestManagerPageAndFilter(t *testing.T) {
 		}
 	}
 
-	items, total := m.Page(0, 10, "", "")
+	items, total := m.Page(0, 10, "", "", "")
 	if total != 3 || len(items) != 3 {
 		t.Errorf("no filter: items=%d total=%d, want 3/3", len(items), total)
 	}
-	items, total = m.Page(0, 10, "alp", "")
+	items, total = m.Page(0, 10, "alp", "", "")
 	if total != 1 || len(items) != 1 || items[0].Name != "alpha" {
 		t.Errorf("filter alp: %+v total=%d", items, total)
 	}
-	items, total = m.Page(1, 1, "", "")
+	items, total = m.Page(1, 1, "", "", "")
 	if total != 3 || len(items) != 1 {
 		t.Errorf("page slice: items=%d total=%d, want 1/3", len(items), total)
 	}
-	items, _ = m.Page(99, 10, "", "")
+	items, _ = m.Page(99, 10, "", "", "")
 	if len(items) != 0 {
 		t.Errorf("offset past end: got %d items", len(items))
+	}
+
+	// A torrent under a user subdirectory is filterable by owner.
+	ownedDir := filepath.Join(dir, "alice")
+	if err := os.MkdirAll(ownedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.AddFile(newTestTorrent(t, ownedDir, "delta", srv.URL)); err != nil {
+		t.Fatal(err)
+	}
+	items, total = m.Page(0, 10, "", "", "alice")
+	if total != 1 || len(items) != 1 || items[0].Name != "delta" {
+		t.Errorf("owner alice: %+v total=%d, want 1×delta", items, total)
+	}
+	if _, total = m.Page(0, 10, "", "", ""); total != 4 {
+		t.Errorf("no filter after add: total=%d, want 4", total)
 	}
 }
 

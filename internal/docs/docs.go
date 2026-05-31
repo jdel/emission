@@ -649,6 +649,12 @@ const docTemplate = `{
                         "description": "Case-insensitive name filter",
                         "name": "q",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter to one owner's torrents",
+                        "name": "owner",
+                        "in": "query"
                     }
                 ],
                 "responses": {

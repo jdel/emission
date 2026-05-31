@@ -33,7 +33,8 @@ const maxQueryLen = 200
 var infoHashRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // listTorrents returns a filtered, paginated page of torrents.
-// Query params: limit (default 10, 0 = all), offset (default 0), q (name filter).
+// Query params: limit (default 10, 0 = all), offset (default 0), q (name
+// filter), owner (filter to one user's torrents).
 //
 //	@Summary	List torrents
 //	@Tags		torrents
@@ -41,6 +42,7 @@ var infoHashRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 //	@Param		limit	query	int		false	"Page size (0 = all, default 10)"
 //	@Param		offset	query	int		false	"Page offset"
 //	@Param		q		query	string	false	"Case-insensitive name filter"
+//	@Param		owner	query	string	false	"Filter to one owner's torrents"
 //	@Success	200	{object}	pagedTorrents
 //	@Router		/api/torrents [get]
 func (s *server) listTorrents(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +58,14 @@ func (s *server) listTorrents(w http.ResponseWriter, r *http.Request) {
 	if len(q) > maxQueryLen {
 		q = q[:maxQueryLen]
 	}
-	items, total := s.mgr.Page(offset, limit, q, s.viewer(r))
+	owner := r.URL.Query().Get("owner")
+	if len(owner) > maxQueryLen {
+		owner = owner[:maxQueryLen]
+	}
+	// viewer() already scopes a non-admin to their own torrents, so owner is
+	// only meaningful for the admin; a regular user filtering by another owner
+	// simply matches nothing.
+	items, total := s.mgr.Page(offset, limit, q, s.viewer(r), owner)
 	writeJSON(w, http.StatusOK, pagedTorrents{Items: items, Total: total})
 }
 

@@ -960,6 +960,10 @@ paths:
         in: query
         name: q
         type: string
+      - description: Filter to one owner's torrents
+        in: query
+        name: owner
+        type: string
       produces:
       - application/json
       responses:
