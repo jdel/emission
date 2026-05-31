@@ -14,7 +14,7 @@ import { Tooltip } from 'radix-ui'
 import { toast } from 'sonner'
 
 import { setClientOptions, type StatsPoint, type Torrent } from '@/lib/api'
-import { formatBytes, formatDateTime, formatETA, formatRate, formatRateInput, formatRelative } from '@/lib/format'
+import { formatBytes, formatDateTime, formatETA, formatRate, formatRateInput, formatRelative, formatUptime } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -329,7 +329,7 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
 
       <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 py-4 sm:grid-cols-6">
         <Stat icon={<StatusDot state={torrentState} />} label="Status">
-          <Tip label={stateConfig[torrentState].tip}>
+          <Tip label={formatUptime(torrent.addedAt, now)}>
             <span className={`cursor-default ${stateConfig[torrentState].className}`}>
               {stateConfig[torrentState].label}
             </span>

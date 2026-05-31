@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, ArrowUp, Gauge, LayoutGrid, LayoutList, Search } from 'lucide-react'
+import { Activity, ArrowUp, Gauge, LayoutGrid, LayoutList, Search, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
   ADMIN_USERNAME,
   connectStats,
   listTorrents,
+  listUsers,
   removeTorrent,
   uploadTorrent,
   type StatsPoint,
@@ -36,6 +37,10 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
   const [total, setTotal] = useState(0)
   const [query, setQuery] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
+  // Admin-only filter to one owner's torrents.
+  const [owner, setOwner] = useState('')
+  const [appliedOwner, setAppliedOwner] = useState('')
+  const [users, setUsers] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -58,12 +63,26 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
     return () => window.clearTimeout(id)
   }, [query])
 
+  // Same for the admin owner filter.
+  useEffect(() => {
+    const id = window.setTimeout(() => setAppliedOwner(owner.trim()), 300)
+    return () => window.clearTimeout(id)
+  }, [owner])
+
+  // The owner dropdown lists every known username (admin only).
+  useEffect(() => {
+    if (!isAdmin) return
+    listUsers()
+      .then((d) => setUsers([...new Set(d.map((u) => u.username))].sort()))
+      .catch(() => {})
+  }, [isAdmin])
+
   // (Re)load the first page whenever the applied search term changes.
   useEffect(() => {
     let cancelled = false
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
-    listTorrents({ limit: PAGE_SIZE, offset: 0, q: appliedQuery })
+    listTorrents({ limit: PAGE_SIZE, offset: 0, q: appliedQuery, owner: appliedOwner })
       .then((r) => {
         if (cancelled) return
         setTorrents(r.items)
@@ -74,20 +93,20 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
     return () => {
       cancelled = true
     }
-  }, [appliedQuery])
+  }, [appliedQuery, appliedOwner])
 
   // reloadRef holds a closure that refetches the currently-visible range. It is
   // updated via an effect so the WebSocket handler always calls the latest.
   const reloadRef = useRef<() => void>(() => {})
   const reload = useCallback(() => {
     const count = Math.max(torrents.length, PAGE_SIZE)
-    listTorrents({ limit: count, offset: 0, q: appliedQuery })
+    listTorrents({ limit: count, offset: 0, q: appliedQuery, owner: appliedOwner })
       .then((r) => {
         setTorrents(r.items)
         setTotal(r.total)
       })
       .catch(() => {})
-  }, [torrents.length, appliedQuery])
+  }, [torrents.length, appliedQuery, appliedOwner])
   useEffect(() => { reloadRef.current = reload }, [reload])
 
   // Live updates: merge per-second stats into loaded rows; refetch on add/remove.
@@ -119,6 +138,7 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
         limit: PAGE_SIZE,
         offset: torrents.length,
         q: appliedQuery,
+        owner: appliedOwner,
       })
       setTorrents((prev) => {
         const have = new Set(prev.map((t) => t.id))
@@ -130,7 +150,7 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
     } finally {
       setLoadingMore(false)
     }
-  }, [torrents.length, appliedQuery])
+  }, [torrents.length, appliedQuery, appliedOwner])
 
   const handleUpload = useCallback(async (files: File[]) => {
     setUploading(true)
@@ -224,6 +244,23 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
                 className="pl-8"
               />
             </div>
+            {isAdmin && (
+              <div className="relative w-full max-w-40">
+                <Users className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+                <Input
+                  value={owner}
+                  onChange={(e) => setOwner(e.target.value)}
+                  placeholder="All users"
+                  list="dashboard-owner-filter"
+                  className="pl-8"
+                />
+                <datalist id="dashboard-owner-filter">
+                  {users.map((u) => (
+                    <option key={u} value={u} />
+                  ))}
+                </datalist>
+              </div>
+            )}
             <div className="flex overflow-hidden rounded-md border">
               <Button
                 variant="ghost"

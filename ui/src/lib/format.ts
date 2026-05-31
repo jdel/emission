@@ -68,6 +68,41 @@ export function formatDateTime(ms: number): string {
   })
 }
 
+/**
+ * formatUptime renders how long since a past unix-ms timestamp in a compact
+ * form: the most-significant non-zero unit plus the next two down to seconds
+ * (max 3 units), e.g. "2m30s", "2d3h52m", "1y3m5d". Year/month are approximate
+ * (365d / 30d); trailing zero units are dropped, interior zeros kept. Units
+ * never overlap in one output, so "m" is months only beside y/d and minutes
+ * only beside h/s.
+ */
+export function formatUptime(atMs: number, nowMs = Date.now()): string {
+  let sec = Math.floor((nowMs - atMs) / 1000)
+  if (sec <= 0) return '0s'
+  const units: [number, string][] = [
+    [31536000, 'y'], // 365 days
+    [2592000, 'm'], // 30 days (month)
+    [86400, 'd'],
+    [3600, 'h'],
+    [60, 'm'], // minute
+    [1, 's'],
+  ]
+  const vals = units.map(([size]) => {
+    const v = Math.floor(sec / size)
+    sec -= v * size
+    return v
+  })
+  const lead = vals.findIndex((v) => v > 0)
+  if (lead < 0) return '0s'
+  const parts: string[] = []
+  for (let i = lead; i < lead + 3 && i < units.length; i++) {
+    parts.push(`${vals[i]}${units[i][1]}`)
+  }
+  // Drop trailing zero units (exactly 2 days → "2d", not "2d0h0m").
+  while (parts.length > 1 && parts[parts.length - 1].startsWith('0')) parts.pop()
+  return parts.join('')
+}
+
 /** formatRelative renders how long ago a past unix-ms timestamp was. */
 export function formatRelative(atMs: number, nowMs = Date.now()): string {
   const sec = Math.round((nowMs - atMs) / 1000)

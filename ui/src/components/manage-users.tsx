@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { hierarchy, tree } from 'd3-hierarchy'
 import { Gauge, List, Network, Ticket, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -45,12 +46,14 @@ interface ManageUsersProps {
 // ---------------------------------------------------------------------------
 
 interface GraphNode {
-  username: string
+  username: string // unique identity; for pending invites this is "invite:<token>"
+  label?: string // display override (pending invites show their target/"pending")
   deviceCount: number
+  pending?: boolean // an outstanding invite, not a registered user
   children: GraphNode[]
 }
 
-function buildGraph(devices: Device[]): GraphNode[] {
+function buildGraph(devices: Device[], invites: PendingInvite[]): GraphNode[] {
   const byUser = new Map<string, string[]>()
   const allUsers = new Set<string>()
   const deviceCounts = new Map<string, number>()
@@ -66,15 +69,32 @@ function buildGraph(devices: Device[]): GraphNode[] {
     }
   }
 
+  // Outstanding invites hang off their creator as leaf nodes.
+  const pendingByUser = new Map<string, PendingInvite[]>()
+  for (const inv of invites) {
+    if (!inv.createdBy) continue
+    const list = pendingByUser.get(inv.createdBy) ?? []
+    list.push(inv)
+    pendingByUser.set(inv.createdBy, list)
+  }
+
   function makeNode(username: string, visited: Set<string>): GraphNode {
     const next = new Set([...visited, username])
+    const userChildren = (byUser.get(username) ?? [])
+      .filter((u) => allUsers.has(u) && !visited.has(u))
+      .sort((a, b) => a.localeCompare(b))
+      .map((u) => makeNode(u, next))
+    const pendingChildren: GraphNode[] = (pendingByUser.get(username) ?? []).map((inv) => ({
+      username: `invite:${inv.token}`,
+      label: inv.username || 'pending',
+      deviceCount: 0,
+      pending: true,
+      children: [],
+    }))
     return {
       username,
       deviceCount: deviceCounts.get(username) ?? 1,
-      children: (byUser.get(username) ?? [])
-        .filter((u) => allUsers.has(u) && !visited.has(u))
-        .sort((a, b) => a.localeCompare(b))
-        .map((u) => makeNode(u, next)),
+      children: [...userChildren, ...pendingChildren],
     }
   }
 
@@ -99,60 +119,34 @@ interface PlacedNode {
 }
 
 const NODE_R = 42
-const LEVEL_R = 110
+const SIBLING_GAP = 110 // horizontal spacing between siblings
+const DEPTH_GAP = 140 // vertical spacing between invite depths
 const SVG_W = 960
 const SVG_H = 560
 
-// Count visible leaves in a subtree (unexpanded nodes count as 1).
-function leafCount(node: GraphNode, expanded: Set<string>): number {
-  if (!expanded.has(node.username) || node.children.length === 0) return 1
-  return node.children.reduce((s, c) => s + leafCount(c, expanded), 0)
-}
-
-// Sector-based radial layout: each subtree gets an angular sector proportional
-// to its leaf count, so branches never cross each other. The link radius is
-// stretched just enough that sibling node circles don't overlap.
-function layoutGraph(
-  node: GraphNode,
-  x: number,
-  y: number,
-  a0: number, // allocated sector start (used for proportional weight only)
-  a1: number, // allocated sector end
-  expanded: Set<string>,
-  placed: PlacedNode[],
-  parent?: string,
-) {
-  placed.push({ username: node.username, node, x, y, parent })
-
-  if (!expanded.has(node.username) || node.children.length === 0) return
-
-  const sectorAngle = a1 - a0
-  const mid = (a0 + a1) / 2
-  const n = node.children.length
-  const totalLeaves = node.children.reduce((s, c) => s + leafCount(c, expanded), 0)
-
-  // Widen the physical spread to at least π so narrow-sector nodes don't need
-  // enormous radii. The allocated sector is still used for proportional weight.
-  const spread = Math.max(sectorAngle, Math.PI * 0.75)
-  const spreadA0 = mid - spread / 2
-  const r = Math.max(LEVEL_R, ((2 * NODE_R) * n) / spread)
-
-  let cursor = 0
-  for (const child of node.children) {
-    const leaves = leafCount(child, expanded)
-    const frac0 = cursor / totalLeaves
-    const frac1 = (cursor + leaves) / totalLeaves
-    const childMid = spreadA0 + (frac0 + frac1) / 2 * spread
-    const childA0 = spreadA0 + frac0 * spread
-    const childA1 = spreadA0 + frac1 * spread
-    layoutGraph(child, x + r * Math.cos(childMid), y + r * Math.sin(childMid), childA0, childA1, expanded, placed, node.username)
-    cursor += leaves
-  }
+// layoutTree places the invite hierarchy as a tidy top-down tree
+// (Reingold–Tilford, via d3-hierarchy) — the root sits at the top and depth
+// grows downward, siblings spread horizontally, and no branches overlap. Only
+// expanded nodes contribute children, so collapsing a node hides its subtree.
+function layoutTree(root: GraphNode, expanded: Set<string>): PlacedNode[] {
+  const h = hierarchy(root, (n) => (expanded.has(n.username) ? n.children : []))
+  tree<GraphNode>().nodeSize([SIBLING_GAP, DEPTH_GAP])(h)
+  const placed: PlacedNode[] = []
+  h.each((d) => {
+    placed.push({
+      username: d.data.username,
+      node: d.data,
+      x: d.x ?? 0, // breadth → horizontal
+      y: d.y ?? 0, // depth → vertical
+      parent: d.parent?.data.username,
+    })
+  })
+  return placed
 }
 
 function UserGraph({ roots }: { roots: GraphNode[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [view, setView] = useState({ zoom: 1, panX: SVG_W / 2, panY: SVG_H / 2 })
+  const [view, setView] = useState({ zoom: 1, panX: SVG_W / 2, panY: NODE_R + 24 })
   const [dragging, setDragging] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<{ x: number; y: number } | null>(null)
@@ -165,7 +159,7 @@ function UserGraph({ roots }: { roots: GraphNode[] }) {
       const rect = el.getBoundingClientRect()
       const curX = (e.clientX - rect.left) * (SVG_W / rect.width)
       const curY = (e.clientY - rect.top) * (SVG_H / rect.height)
-      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
+      const factor = e.deltaY < 0 ? 1.025 : 1 / 1.025
       setView((v) => {
         const newZoom = Math.max(0.2, Math.min(5, v.zoom * factor))
         return {
@@ -180,8 +174,7 @@ function UserGraph({ roots }: { roots: GraphNode[] }) {
   }, [])
 
   const adminRoot = roots.find((r) => r.username === ADMIN_USERNAME) ?? roots[0]
-  const placed: PlacedNode[] = []
-  if (adminRoot) layoutGraph(adminRoot, 0, 0, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI, expanded, placed)
+  const placed: PlacedNode[] = adminRoot ? layoutTree(adminRoot, expanded) : []
 
   function toggle(username: string) {
     setExpanded((prev) => {
@@ -244,9 +237,11 @@ function UserGraph({ roots }: { roots: GraphNode[] }) {
             if (!parent) return null
             const p = placed.find((n) => n.username === parent)
             if (!p) return null
+            const midY = (p.y + y) / 2
             return (
-              <line key={`${parent}-${username}`}
-                x1={p.x} y1={p.y} x2={x} y2={y}
+              <path key={`${parent}-${username}`}
+                d={`M ${p.x} ${p.y} C ${p.x} ${midY}, ${x} ${midY}, ${x} ${y}`}
+                fill="none"
                 style={{ stroke: 'var(--border)', strokeWidth: 1.5 }}
               />
             )
@@ -254,10 +249,12 @@ function UserGraph({ roots }: { roots: GraphNode[] }) {
 
           {placed.map(({ username, node, x, y }) => {
             const isAdmin = username === ADMIN_USERNAME
+            const isPending = node.pending === true
             const hasChildren = node.children.length > 0
             const isExpanded = expanded.has(username)
+            const label = node.label ?? username
             const lines: { text: string; dim: boolean }[] = [
-              { text: username.length > 11 ? username.slice(0, 10) + '…' : username, dim: false },
+              { text: label.length > 11 ? label.slice(0, 10) + '…' : label, dim: false },
             ]
             if (node.deviceCount > 1) lines.push({ text: `${node.deviceCount} devices`, dim: true })
             if (node.children.length > 0) lines.push({ text: `${node.children.length} invited`, dim: true })
@@ -273,8 +270,8 @@ function UserGraph({ roots }: { roots: GraphNode[] }) {
                 <circle cx={x} cy={y} r={NODE_R}
                   style={{
                     fill: isAdmin ? 'var(--primary)' : 'var(--card)',
-                    stroke: isAdmin ? 'var(--primary)' : isExpanded ? 'var(--ring)' : 'var(--border)',
-                    strokeWidth: isExpanded && !isAdmin ? 2 : 1.5,
+                    stroke: isAdmin ? 'var(--primary)' : isPending ? '#3b82f6' : isExpanded ? 'var(--ring)' : 'var(--border)',
+                    strokeWidth: isPending || (isExpanded && !isAdmin) ? 2 : 1.5,
                   }}
                 />
                 {lines.map((line, i) => (
@@ -415,7 +412,7 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
     (i) => !q || (i.username || '').toLowerCase().includes(q),
   )
 
-  const graphRoots = buildGraph(devices)
+  const graphRoots = buildGraph(devices, invites)
 
   return (
     <>

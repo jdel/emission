@@ -48,6 +48,7 @@ export interface ListParams {
   limit?: number // page size; 0 = all
   offset?: number
   q?: string // case-insensitive name filter
+  owner?: string // filter to one owner's torrents (admin only)
 }
 
 export interface UploadOptions {
@@ -78,6 +79,7 @@ export async function listTorrents(params: ListParams = {}): Promise<PagedTorren
   if (params.limit !== undefined) sp.set('limit', String(params.limit))
   if (params.offset !== undefined) sp.set('offset', String(params.offset))
   if (params.q) sp.set('q', params.q)
+  if (params.owner) sp.set('owner', params.owner)
   const qs = sp.toString()
   const res = await request('/torrents' + (qs ? `?${qs}` : ''))
   return (await res.json()) as PagedTorrents
