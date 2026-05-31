@@ -366,7 +366,7 @@ exists — the operator can register the admin device at the dedicated
   torrent defaults its max upload rate to its owner's bandwidth.
 - **Per-user storage.** Uploads go to `<storage.torrents>/<username>/`.
   Each user sees only their own torrents plus anything in the root
-  (shared by the admin).
+  (shared by the admin); the admin can filter the torrent list by user.
 - **Sessions** are HttpOnly + SameSite=Strict cookies with a sliding
   7-day expiry. Restart clears all sessions; users log in again.
 
