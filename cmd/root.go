@@ -36,7 +36,7 @@ var version = "dev"
 // appScope locates emission's XDG-compliant config and data directories.
 var appScope = gap.NewScope(gap.User, "emission")
 
-// RootCmd builds the top-level cobra command tree (emission seed | serve | clients)
+// RootCmd builds the top-level cobra command tree (emission seed | serve | clients | where)
 // with the shared flag set and viper bindings used by every subcommand.
 func RootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -83,6 +83,7 @@ func RootCmd() *cobra.Command {
 	cmd.AddCommand(clientsCmd())
 	cmd.AddCommand(seedCmd())
 	cmd.AddCommand(serveCmd())
+	cmd.AddCommand(whereCmd())
 	return cmd
 }
 

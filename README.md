@@ -215,6 +215,7 @@ emission serve \
 | `emission seed` | CLI-only watcher — no API, no auth, no state file |
 | `emission serve` | Watcher + HTTP API + optional web UI and auth |
 | `emission clients` | List all available client profiles |
+| `emission where` | Print resolved data and config locations |
 
 ### Common flags (both `seed` and `serve`)
 
