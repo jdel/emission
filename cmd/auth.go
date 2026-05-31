@@ -348,6 +348,54 @@ func (s *server) setUserBandwidth(w http.ResponseWriter, r *http.Request) {
 	s.applyBandwidth(w, r, username)
 }
 
+// getUserProxyAdmin returns any user's effective tracker proxy (admin only).
+//
+//	@Summary	Get a user's tracker proxy (admin only)
+//	@Tags		admin
+//	@Produce	json
+//	@Param		username	path	string	true	"Username"
+//	@Success	200	{object}	proxyInfo
+//	@Failure	400	{object}	errorResponse
+//	@Failure	403	{object}	errorResponse
+//	@Router		/api/auth/users/{username}/proxy [get]
+func (s *server) getUserProxyAdmin(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		writeError(w, http.StatusForbidden, "admin only")
+		return
+	}
+	username := r.PathValue("username")
+	if !usernameRe.MatchString(username) {
+		writeError(w, http.StatusBadRequest, "invalid username")
+		return
+	}
+	s.writeProxyInfo(w, username)
+}
+
+// setUserProxyAdmin sets any user's tracker proxy, then probes it (admin only).
+//
+//	@Summary	Set a user's tracker proxy (admin only)
+//	@Tags		admin
+//	@Accept		json
+//	@Produce	json
+//	@Param		username	path	string		true	"Username"
+//	@Param		body		body	proxyUpdate	true	"Proxy URL (empty = direct)"
+//	@Success	200	{object}	proxyInfo
+//	@Failure	400	{object}	errorResponse
+//	@Failure	403	{object}	errorResponse
+//	@Router		/api/auth/users/{username}/proxy [put]
+func (s *server) setUserProxyAdmin(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdmin(r) {
+		writeError(w, http.StatusForbidden, "admin only")
+		return
+	}
+	username := r.PathValue("username")
+	if !usernameRe.MatchString(username) {
+		writeError(w, http.StatusBadRequest, "invalid username")
+		return
+	}
+	s.applyProxy(w, r, username)
+}
+
 // authRemoveCredential deletes a single passkey. The admin's own device is
 // protected and can never be removed.
 //

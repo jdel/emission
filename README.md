@@ -17,6 +17,7 @@ blend in with legitimate peers.
 - Upload rate scales with leecher count (hyperbolic weighting) so traffic looks organic.
 - Per-user upload bandwidth ceiling (`--client.bandwidth`) shared proportionally across that user's torrents.
 - Three seeding profiles (stealth / normal / aggressive) control how steeply the rate ramps with leechers.
+- Optional tracker proxy: a server-wide default (`--client.proxy`) that each user can override with their own in settings.
 - Optional ratio cap (`--client.max-ratio`) stops accumulating once the target is hit.
 - Optional auto-remove (`--client.autoremove`) deletes the torrent when the cap is reached.
 - Tracker `min_interval` is respected — emission never announces more often than the tracker asks.
@@ -41,6 +42,19 @@ fast at first, then flattens
 as it approaches `maxRate` — it never quite reaches it. A ±20% jitter is applied
 each second so the traffic looks organic, and the per-user bandwidth ceiling
 caps the sum across all of that user's torrents.
+
+### Tracker proxying
+
+By default emission announces directly. Set `--client.proxy` to route **all**
+tracker traffic — for every user — through one proxy you control:
+
+```sh
+emission serve --client.proxy socks5://10.0.0.1:1080   # or http://, https://
+```
+
+Use a proxy you trust: tracker announce URLs can carry private-tracker secrets
+(passkeys), so the proxy operator sees them. Free/public proxy lists are not a
+good fit for this — point it at your own VPN gateway or SOCKS endpoint instead.
 
 ![Screenshot](screenshot.png)
 
@@ -212,6 +226,7 @@ emission serve \
 | `--client.max-peers`  | `EMISSION_CLIENT_MAX_PEERS`  | Peers to request per tracker (`0` = client default) |
 | `--client.max-ratio`  | `EMISSION_CLIENT_MAX_RATIO`  | Stop accumulating upload at N × torrent size (`0` = unlimited) |
 | `--client.autoremove` | `EMISSION_CLIENT_AUTOREMOVE` | Remove the torrent automatically when the ratio cap is reached (default: `false`) |
+| `--client.proxy`      | `EMISSION_CLIENT_PROXY`      | Route all tracker traffic through this proxy (`http`/`https`/`socks5`); empty = announce directly (default: empty) |
 | `--log-level`         | `EMISSION_LOG_LEVEL`         | Log verbosity: `trace`, `debug`, `info`, `warn`, `error` (default: `info`) |
 | `--config`            | `EMISSION_CONFIG`            | Config file path (auto-discovered if unset) |
 

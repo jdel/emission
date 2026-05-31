@@ -11,16 +11,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jdel/emission/internal/client"
 	"github.com/jdel/emission/internal/torrent"
+	"github.com/jdel/emission/internal/tracker"
 	"github.com/rs/zerolog/log"
 )
 
@@ -90,6 +95,13 @@ type Manager struct {
 	clientMu    sync.Mutex
 	userClients map[string]*client.Client // per-owner identity; "" = unowned/root
 
+	proxyDefault string // server-wide --client.proxy; per-user default ("" = direct)
+	proxyMu      sync.Mutex
+	proxyClients map[string]*http.Client // announce client cached per owner
+
+	proxyStatusMu sync.Mutex
+	proxyStatus   map[string]proxyProbe // owner -> last probe result
+
 	settings *settingsStore // per-owner upload bandwidth + seeding profile
 
 	subsMu sync.Mutex
@@ -105,28 +117,32 @@ type Manager struct {
 // upload at that multiple of the torrent size (0 = unlimited); autoRemove
 // removes the torrent automatically when the cap is reached; defaultBandwidth
 // is the per-user upload ceiling (bytes/sec) applied to users without an
-// explicit setting. To override the peer count requested per announce, set
-// tmpl.NumWant before passing it in.
-func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove bool, defaultBandwidth uint64) *Manager {
+// explicit setting. proxyURL, when set, routes every announce through that one
+// proxy (http/https/socks5); empty announces directly. To override the peer
+// count requested per announce, set tmpl.NumWant before passing it in.
+func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove bool, defaultBandwidth uint64, proxyURL string) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	abs, err := filepath.Abs(torrentsDir)
 	if err != nil {
 		abs = torrentsDir
 	}
 	return &Manager{
-		client:      tmpl,
-		httpClient:  &http.Client{Timeout: 30 * time.Second},
-		maxRatio:    maxRatio,
-		autoRemove:  autoRemove,
-		torrentsDir: abs,
-		baseCtx:     ctx,
-		cancel:      cancel,
-		settings:    loadSettingsStore(filepath.Join(abs, userSettingsFileName), defaultBandwidth),
-		sessions:    make(map[string]*session),
-		byPath:      make(map[string]*session),
-		userClients: make(map[string]*client.Client),
-		subs:        make(map[chan struct{}]struct{}),
-		statSubs:    make(map[chan StatUpdate]struct{}),
+		client:       tmpl,
+		httpClient:   &http.Client{Timeout: 30 * time.Second}, // direct (no proxy)
+		maxRatio:     maxRatio,
+		autoRemove:   autoRemove,
+		torrentsDir:  abs,
+		baseCtx:      ctx,
+		cancel:       cancel,
+		proxyDefault: proxyURL,
+		proxyClients: make(map[string]*http.Client),
+		proxyStatus:  make(map[string]proxyProbe),
+		settings:     loadSettingsStore(filepath.Join(abs, userSettingsFileName), defaultBandwidth),
+		sessions:     make(map[string]*session),
+		byPath:       make(map[string]*session),
+		userClients:  make(map[string]*client.Client),
+		subs:         make(map[chan struct{}]struct{}),
+		statSubs:     make(map[chan StatUpdate]struct{}),
 	}
 }
 
@@ -200,6 +216,225 @@ func (m *Manager) HalfSaturation(owner string) float64 {
 // SetHalfSaturation sets owner's seeding-curve half-saturation and persists it.
 func (m *Manager) SetHalfSaturation(owner string, k float64) error {
 	return m.settings.setHalfSaturation(owner, k)
+}
+
+// proxyProbe is the recorded result of the last reachability test of an owner's
+// proxy.
+type proxyProbe struct {
+	ok  bool
+	err string
+}
+
+// hostnameRe matches a DNS hostname: dot-separated labels of letters, digits,
+// and hyphens (not leading/trailing a label).
+var hostnameRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$`)
+
+// ValidateProxyURL enforces the strict shape scheme://host:port — an http,
+// https, or socks5 scheme, an IP or hostname, and an explicit port, with no
+// userinfo, path, query, or fragment. Anything looser could turn the proxy
+// field into a data-exfiltration target, so it is rejected. Empty is not valid
+// here; callers treat "" as "announce directly" before calling.
+func ValidateProxyURL(proxyURL string) error {
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return fmt.Errorf("invalid proxy URL: %v", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "socks5":
+	default:
+		return fmt.Errorf("proxy scheme must be http, https, or socks5 (got %q)", u.Scheme)
+	}
+	if u.User != nil {
+		return errors.New("proxy must not contain credentials; use scheme://host:port")
+	}
+	if u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+		return errors.New("proxy must be exactly scheme://host:port (no path or query)")
+	}
+	host, port := u.Hostname(), u.Port()
+	if host == "" || port == "" {
+		return errors.New("proxy must include both host and port: scheme://host:port")
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return errors.New("proxy port must be a number 1-65535")
+	}
+	if net.ParseIP(host) == nil && !hostnameRe.MatchString(host) {
+		return errors.New("proxy host must be an IP address or hostname")
+	}
+	return nil
+}
+
+// UserProxy returns owner's effective proxy URL — their explicit setting when
+// set, otherwise the server default — and whether owner has set one explicitly.
+// An effective value of "" means owner announces directly.
+func (m *Manager) UserProxy(owner string) (proxyURL string, explicit bool) {
+	if p, ok := m.settings.proxy(owner); ok {
+		return p, true
+	}
+	return m.proxyDefault, false
+}
+
+// ProxyDefault returns the server-wide default proxy URL (--client.proxy).
+func (m *Manager) ProxyDefault() string { return m.proxyDefault }
+
+// effectiveProxy is the proxy URL owner announces through ("" = direct).
+func (m *Manager) effectiveProxy(owner string) string {
+	px, _ := m.UserProxy(owner)
+	return px
+}
+
+// trusted reports whether proxyURL is the admin-set CLI default. The default is
+// dialed without the internal-address guard; any other (user-supplied) proxy is
+// guarded.
+func (m *Manager) trusted(proxyURL string) bool {
+	return proxyURL != "" && proxyURL == m.proxyDefault
+}
+
+// announceClient returns the HTTP client for owner's effective proxy, caching
+// one client per owner. A direct ("") proxy uses the shared no-proxy client; a
+// user-supplied proxy is dialed through the internal-address guard, the trusted
+// CLI default without it. SetUserProxy drops the owner's cached client when the
+// proxy changes, so a cached entry always matches the current setting.
+func (m *Manager) announceClient(owner string) *http.Client {
+	px := m.effectiveProxy(owner)
+	if px == "" {
+		return m.httpClient
+	}
+	m.proxyMu.Lock()
+	defer m.proxyMu.Unlock()
+	if c, ok := m.proxyClients[owner]; ok {
+		return c
+	}
+	u, err := url.Parse(px)
+	if err != nil {
+		return m.httpClient // already validated on set; fall back to direct
+	}
+	tr := &http.Transport{Proxy: http.ProxyURL(u)}
+	if !m.trusted(px) {
+		tr.DialContext = tracker.GuardedDialContext
+	}
+	c := &http.Client{Timeout: 30 * time.Second, Transport: tr}
+	m.proxyClients[owner] = c
+	return c
+}
+
+// SetUserProxy validates and persists owner's proxy URL. "" means announce
+// directly; any non-empty value must satisfy [ValidateProxyURL]. A user may not
+// point at a local/private address (unless it is the trusted CLI default); a
+// malformed or local value is rejected without persisting.
+func (m *Manager) SetUserProxy(owner, proxyURL string) error {
+	proxyURL = strings.TrimSpace(proxyURL)
+	if proxyURL != "" {
+		if err := ValidateProxyURL(proxyURL); err != nil {
+			return err
+		}
+		if !m.trusted(proxyURL) {
+			if err := rejectLocalHost(proxyURL); err != nil {
+				return err
+			}
+		}
+	}
+	if err := m.settings.setProxy(owner, proxyURL); err != nil {
+		return err
+	}
+	// Drop the owner's cached client so the next announce rebuilds it for the
+	// new proxy.
+	m.proxyMu.Lock()
+	if c, ok := m.proxyClients[owner]; ok {
+		c.CloseIdleConnections()
+		delete(m.proxyClients, owner)
+	}
+	m.proxyMu.Unlock()
+	return nil
+}
+
+// rejectLocalHost blocks a proxy whose host is a literal loopback/private/
+// link-local address, so a user cannot aim it at an internal service. A
+// hostname is allowed through here but still dialed through the guard, so one
+// that resolves to an internal address fails when the proxy is used.
+func rejectLocalHost(proxyURL string) error {
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return err
+	}
+	if ip := net.ParseIP(u.Hostname()); ip != nil && tracker.IsDisallowedIP(ip) {
+		return errors.New("proxy must be a public address, not a local/private one")
+	}
+	return nil
+}
+
+// proxyProbeURL is the harmless endpoint a probe requests through the proxy to
+// confirm it relays traffic; any HTTP response means the proxy works.
+const proxyProbeURL = "https://example.com"
+
+// ProbeUserProxy tests owner's effective proxy with a short request and records
+// the result for [ProxyStatus]. A direct (empty) proxy is always reachable.
+// Returns ok and an error message (empty when ok).
+func (m *Manager) ProbeUserProxy(ctx context.Context, owner string) (ok bool, errMsg string) {
+	px := m.effectiveProxy(owner)
+	if px == "" {
+		m.recordProbe(owner, proxyProbe{ok: true})
+		return true, ""
+	}
+	pr := proxyProbe{ok: true}
+	if err := probeProxy(ctx, px, !m.trusted(px)); err != nil {
+		pr = proxyProbe{ok: false, err: err.Error()}
+	}
+	m.recordProbe(owner, pr)
+	return pr.ok, pr.err
+}
+
+func (m *Manager) recordProbe(owner string, pr proxyProbe) {
+	m.proxyStatusMu.Lock()
+	m.proxyStatus[owner] = pr
+	m.proxyStatusMu.Unlock()
+}
+
+// ProxyStatus reports owner's proxy state for display: "direct" when the
+// effective proxy is empty, "ok"/"error" once probed (with the error message),
+// or "unknown" when not probed yet this run.
+func (m *Manager) ProxyStatus(owner string) (status, errMsg string) {
+	if m.effectiveProxy(owner) == "" {
+		return "direct", ""
+	}
+	m.proxyStatusMu.Lock()
+	pr, ok := m.proxyStatus[owner]
+	m.proxyStatusMu.Unlock()
+	switch {
+	case !ok:
+		return "unknown", ""
+	case pr.ok:
+		return "ok", ""
+	default:
+		return "error", pr.err
+	}
+}
+
+// probeProxy makes a short HEAD request through proxyURL. Any HTTP response
+// counts as success; only a transport failure (refused, timeout, bad proxy)
+// returns an error. When guarded, the proxy is dialed through the internal-
+// address guard, so one resolving to a local host fails here.
+func probeProxy(ctx context.Context, proxyURL string, guarded bool) error {
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	tr := &http.Transport{Proxy: http.ProxyURL(u), DisableKeepAlives: true} // one-shot; don't pool the conn
+	if guarded {
+		tr.DialContext = tracker.GuardedDialContext
+	}
+	c := &http.Client{Transport: tr}
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, proxyProbeURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
 }
 
 // AddFile reads and parses the .torrent file at path and starts seeding it at a

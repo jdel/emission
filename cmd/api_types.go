@@ -50,11 +50,25 @@ type bandwidthInfo struct {
 }
 
 // bandwidthUpdate is the PUT /api/bandwidth and admin set-bandwidth request
-// body. HalfSaturation is optional; when nil the seeding curve is left
-// unchanged.
+// body. Optional fields left nil are unchanged.
 type bandwidthUpdate struct {
 	Bandwidth      string   `json:"bandwidth"`                // e.g. "2M"
 	HalfSaturation *float64 `json:"halfSaturation,omitempty"` // leechers for half speed
+}
+
+// proxyInfo is the GET/PUT /api/proxy response: the caller's effective proxy,
+// the server default they inherit, and the last reachability probe result.
+type proxyInfo struct {
+	Proxy   string `json:"proxy"`           // effective proxy URL ("" = announce directly)
+	Default string `json:"default"`         // server default (--client.proxy), "" if none
+	Status  string `json:"status"`          // "ok" | "error" | "direct" | "unknown"
+	Error   string `json:"error,omitempty"` // probe error when status is "error"
+}
+
+// proxyUpdate is the PUT /api/proxy request body. An empty proxy means announce
+// directly.
+type proxyUpdate struct {
+	Proxy string `json:"proxy"`
 }
 
 // errorResponse is the body shape every non-2xx handler returns.
@@ -90,10 +104,10 @@ type inviteResponse struct {
 
 // deviceInfo is one entry in the GET /api/auth/users response array.
 type deviceInfo struct {
-	ID        string `json:"id"` // base64url credential id
-	Username  string `json:"username"`
-	InvitedBy string `json:"invitedBy,omitempty"` // empty for the bootstrap admin
-	AddedAt   int64  `json:"addedAt"`
+	ID             string  `json:"id"` // base64url credential id
+	Username       string  `json:"username"`
+	InvitedBy      string  `json:"invitedBy,omitempty"` // empty for the bootstrap admin
+	AddedAt        int64   `json:"addedAt"`
 	Bandwidth      uint64  `json:"bandwidth"`      // this user's upload ceiling, bytes/sec
 	Profile        string  `json:"profile"`        // this user's seeding-curve display name
 	HalfSaturation float64 `json:"halfSaturation"` // leechers for half speed

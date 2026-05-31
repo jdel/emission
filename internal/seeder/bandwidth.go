@@ -63,6 +63,7 @@ type userSettings struct {
 	Bandwidth      uint64  `json:"bandwidth,omitempty"`      // 0 = use the store default
 	HalfSaturation float64 `json:"halfSaturation,omitempty"` // 0 = normal; leechers for half speed
 	Profile        string  `json:"profile,omitempty"`        // legacy; migrated to HalfSaturation on load
+	Proxy          *string `json:"proxy,omitempty"`          // nil = use server default; set (incl "") = explicit ("" = direct)
 }
 
 // settingsStore holds per-owner seeding preferences (upload-bandwidth ceiling
@@ -149,6 +150,29 @@ func (s *settingsStore) setHalfSaturation(owner string, k float64) error {
 	u := s.perUser[owner]
 	u.HalfSaturation = k
 	u.Profile = ""
+	s.perUser[owner] = u
+	snapshot := s.snapshotLocked()
+	s.mu.Unlock()
+	return s.save(snapshot)
+}
+
+// proxy returns owner's explicit proxy URL and whether one is set. When unset,
+// the caller falls back to the server default.
+func (s *settingsStore) proxy(owner string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p := s.perUser[owner].Proxy; p != nil {
+		return *p, true
+	}
+	return "", false
+}
+
+// setProxy records owner's explicit proxy URL ("" = announce directly) and
+// persists it.
+func (s *settingsStore) setProxy(owner, proxyURL string) error {
+	s.mu.Lock()
+	u := s.perUser[owner]
+	u.Proxy = &proxyURL
 	s.perUser[owner] = u
 	snapshot := s.snapshotLocked()
 	s.mu.Unlock()

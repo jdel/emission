@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import {
   ADMIN_USERNAME,
+  getUserProxy,
   listUsers,
   listInvites,
   listTorrents,
@@ -314,8 +315,13 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
   const [showUsers, setShowUsers] = useState(true)
   const [showInvites, setShowInvites] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
-  const [bwUser, setBwUser] = useState<{ username: string; bytes: number; halfSat: number } | null>(null)
+  const [bwUser, setBwUser] = useState<{
+    username: string
+    bytes: number
+    halfSat: number
+  } | null>(null)
   const [torrentCounts, setTorrentCounts] = useState<Record<string, number>>({})
+  const [proxyMap, setProxyMap] = useState<Record<string, string>>({})
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -329,6 +335,15 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
           if (owner) counts[owner] = (counts[owner] ?? 0) + 1
         }
         setTorrentCounts(counts)
+        const unames = [...new Set(d.map((dev) => dev.username))]
+        Promise.allSettled(unames.map((u) => getUserProxy(u))).then((results) => {
+          const pm: Record<string, string> = {}
+          for (let idx = 0; idx < unames.length; idx++) {
+            const r = results[idx]
+            if (r.status === 'fulfilled') pm[unames[idx]] = r.value.proxy
+          }
+          setProxyMap(pm)
+        })
       })
       .catch((e) => toast.error(`Load failed: ${String(e)}`))
       .finally(() => setLoading(false))
@@ -489,6 +504,19 @@ export function ManageUsers({ open, onOpenChange }: ManageUsersProps) {
                                 {torrentCounts[username] ?? 0} torrent
                                 {(torrentCounts[username] ?? 0) === 1 ? '' : 's'}
                               </span>
+                              {(() => {
+                                const pendingCount = invites.filter((i) => i.createdBy === username).length
+                                return pendingCount > 0 ? (
+                                  <span className="text-muted-foreground font-normal">
+                                    {' · '}{pendingCount} pending invite{pendingCount === 1 ? '' : 's'}
+                                  </span>
+                                ) : null
+                              })()}
+                              {proxyMap[username] && (
+                                <span className="text-muted-foreground font-normal font-mono text-xs">
+                                  {' · '}{proxyMap[username]}
+                                </span>
+                              )}
                             </span>
                             <div className="flex items-center gap-1">
                               <Button

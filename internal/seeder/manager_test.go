@@ -48,7 +48,7 @@ func newTestManager(t *testing.T, dir string) *Manager {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := New(c, dir, 0, false, 1<<30) // generous bandwidth: never the binding constraint here
+	m := New(c, dir, 0, false, 1<<30, "") // generous bandwidth: never the binding constraint here
 	t.Cleanup(m.Shutdown)
 	return m
 }

@@ -158,7 +158,9 @@ export async function setBandwidth(bandwidth: string, halfSaturation?: number): 
   })
 }
 
-/** setUserBandwidth sets any user's bandwidth and curve (admin only). */
+/**
+ * setUserBandwidth sets any user's bandwidth and seeding curve (admin only).
+ */
 export async function setUserBandwidth(
   username: string,
   bandwidth: string,
@@ -169,6 +171,87 @@ export async function setUserBandwidth(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ bandwidth, halfSaturation }),
   })
+}
+
+// --- tracker proxy ---------------------------------------------------------
+
+export type ProxyStatus = 'ok' | 'error' | 'direct' | 'unknown'
+
+export interface ProxyInfo {
+  proxy: string // effective proxy URL ("" = announce directly)
+  default: string // server default (--client.proxy), "" if none
+  status: ProxyStatus
+  error?: string // probe error when status is "error"
+}
+
+/** getProxy returns the caller's effective proxy and its last probe status. */
+export async function getProxy(): Promise<ProxyInfo> {
+  const res = await request('/proxy')
+  return (await res.json()) as ProxyInfo
+}
+
+/**
+ * setProxy sets the caller's own tracker proxy (empty = announce directly) and
+ * returns the result of probing it. The server rejects malformed or
+ * local/private addresses with an error.
+ */
+export async function setProxy(proxy: string): Promise<ProxyInfo> {
+  const res = await request('/proxy', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ proxy }),
+  })
+  return (await res.json()) as ProxyInfo
+}
+
+/** getUserProxy returns a specific user's effective proxy (admin only). */
+export async function getUserProxy(username: string): Promise<ProxyInfo> {
+  const res = await request(`/auth/users/${encodeURIComponent(username)}/proxy`)
+  return (await res.json()) as ProxyInfo
+}
+
+/** setUserProxy sets any user's tracker proxy (admin only). */
+export async function setUserProxy(username: string, proxy: string): Promise<ProxyInfo> {
+  const res = await request(`/auth/users/${encodeURIComponent(username)}/proxy`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ proxy }),
+  })
+  return (await res.json()) as ProxyInfo
+}
+
+/**
+ * proxyFormatError returns a human message when value is not a valid
+ * scheme://host:port proxy (http/https/socks5) or points at a local/private
+ * address, or null when it is acceptable. Empty is valid (direct). This mirrors
+ * the server's checks for fast feedback; the server remains authoritative.
+ */
+export function proxyFormatError(value: string): string | null {
+  const v = value.trim()
+  if (v === '') return null // direct
+  const m = /^(https?|socks5):\/\/([^/?#@]+)$/i.exec(v)
+  if (!m) return 'Use scheme://host:port (http, https, or socks5); no path, query, or credentials'
+  const hostPort = m[2]
+  const i = hostPort.lastIndexOf(':')
+  if (i <= 0) return 'Missing port — use scheme://host:port'
+  const host = hostPort.slice(0, i)
+  const port = Number(hostPort.slice(i + 1))
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return 'Port must be 1-65535'
+  if (isLocalHost(host)) return 'Proxy must be a public address, not a local/private one'
+  return null
+}
+
+// isLocalHost flags obvious loopback/private/link-local hosts for fast UI
+// feedback; the server applies the full policy (incl. hostname resolution).
+function isLocalHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '')
+  if (h === 'localhost' || h === '::1' || h === '0.0.0.0' || h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd')) {
+    return true
+  }
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/.exec(h)
+  if (!m) return false
+  const a = Number(m[1]), b = Number(m[2])
+  return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254)
 }
 
 // --- authentication (passkeys) ---------------------------------------------

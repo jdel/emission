@@ -122,7 +122,7 @@ func addFakeSession(m *Manager, id, owner string, max uint64, leechers int64) {
 
 func TestCappedRateScalesToBudget(t *testing.T) {
 	c := newTestClient(t)
-	m := New(c, t.TempDir(), 0, false, 1000) // tiny 1000 B/s budget
+	m := New(c, t.TempDir(), 0, false, 1000, "") // tiny 1000 B/s budget
 	t.Cleanup(m.Shutdown)
 
 	// Two of alice's torrents, each with leechers → natural rates that together
@@ -147,7 +147,7 @@ func TestCappedRateSingleTorrentClampedToBandwidth(t *testing.T) {
 	// One torrent, max far above the user's bandwidth: it must be leecher-
 	// weighted against min(max, bandwidth), NOT pinned at the full budget.
 	c := newTestClient(t)
-	m := New(c, t.TempDir(), 0, false, 1<<20) // 1M budget
+	m := New(c, t.TempDir(), 0, false, 1<<20, "") // 1M budget
 	t.Cleanup(m.Shutdown)
 
 	addFakeSession(m, "a", "alice", 10<<20, 4) // max 10M, 4 leechers
@@ -167,7 +167,7 @@ func TestCappedRateSingleTorrentClampedToBandwidth(t *testing.T) {
 
 func TestCappedRateUnderBudgetUnchanged(t *testing.T) {
 	c := newTestClient(t)
-	m := New(c, t.TempDir(), 0, false, 1<<30) // huge budget: never binds
+	m := New(c, t.TempDir(), 0, false, 1<<30, "") // huge budget: never binds
 	t.Cleanup(m.Shutdown)
 
 	addFakeSession(m, "a", "alice", 10000, 10)

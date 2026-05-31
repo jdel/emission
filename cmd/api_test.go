@@ -64,7 +64,7 @@ func TestBandwidthEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<20) // 1M default
+	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<20, "") // 1M default
 	t.Cleanup(mgr.Shutdown)
 	srv := &server{mgr: mgr, torrentsDir: t.TempDir()} // auth nil → owner ""
 
@@ -114,6 +114,61 @@ func TestBandwidthEndpoints(t *testing.T) {
 	srv.setMyBandwidth(rec, httptest.NewRequest(http.MethodPut, "/api/bandwidth", strings.NewReader(`{"bandwidth":"2M","halfSaturation":99}`)))
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("bad half-saturation code %d, want 400", rec.Code)
+	}
+}
+
+func TestProxyEndpoints(t *testing.T) {
+	c, err := client.New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<20, "") // no default proxy
+	t.Cleanup(mgr.Shutdown)
+	srv := &server{mgr: mgr, torrentsDir: t.TempDir()} // auth nil → owner ""
+
+	get := func() proxyInfo {
+		rec := httptest.NewRecorder()
+		srv.getProxy(rec, httptest.NewRequest(http.MethodGet, "/api/proxy", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET code %d", rec.Code)
+		}
+		var pi proxyInfo
+		if err := json.Unmarshal(rec.Body.Bytes(), &pi); err != nil {
+			t.Fatal(err)
+		}
+		return pi
+	}
+	put := func(body string) (int, proxyInfo) {
+		rec := httptest.NewRecorder()
+		srv.setProxy(rec, httptest.NewRequest(http.MethodPut, "/api/proxy", strings.NewReader(body)))
+		var pi proxyInfo
+		_ = json.Unmarshal(rec.Body.Bytes(), &pi)
+		return rec.Code, pi
+	}
+
+	// No proxy set → direct.
+	if pi := get(); pi.Status != "direct" || pi.Proxy != "" {
+		t.Errorf("initial = %+v, want direct/empty", pi)
+	}
+	// Malformed scheme → 400.
+	if code, _ := put(`{"proxy":"ftp://x:21"}`); code != http.StatusBadRequest {
+		t.Errorf("malformed code %d, want 400", code)
+	}
+	// Local/private address → 400 (exfil/SSRF guard).
+	if code, _ := put(`{"proxy":"http://127.0.0.1:8080"}`); code != http.StatusBadRequest {
+		t.Errorf("local code %d, want 400", code)
+	}
+	// Well-formed but unreachable → 200, saved, status "error".
+	code, pi := put(`{"proxy":"http://proxy.invalid:9"}`)
+	if code != http.StatusOK {
+		t.Fatalf("valid put code %d body %+v", code, pi)
+	}
+	if pi.Proxy != "http://proxy.invalid:9" || pi.Status != "error" || pi.Error == "" {
+		t.Errorf("after set = %+v, want proxy set with error status", pi)
+	}
+	// Clear → direct.
+	if code, pi := put(`{"proxy":""}`); code != http.StatusOK || pi.Status != "direct" {
+		t.Errorf("clear = %d %+v, want 200/direct", code, pi)
 	}
 }
 

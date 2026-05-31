@@ -147,11 +147,11 @@ export function DashboardHeader({
                     <DropdownMenu.Separator className="-mx-1 my-1 h-px bg-border" />
                     {!isAdmin && (
                       <DropdownMenu.Item className={MENU_ITEM} onSelect={() => authRef.current?.addDevice()}>
-                        <UserPlus className="size-4" /> Add device
+                        <Smartphone className="size-4" /> Add device
                       </DropdownMenu.Item>
                     )}
                     <DropdownMenu.Item className={MENU_ITEM} onSelect={() => authRef.current?.openInvite()}>
-                      <Smartphone className="size-4" /> Invite user
+                      <UserPlus className="size-4" /> Invite user
                     </DropdownMenu.Item>
                     {isAdmin && (
                       <DropdownMenu.Item className={MENU_ITEM} onSelect={() => authRef.current?.openManage()}>

@@ -107,8 +107,8 @@ func TestDecodeErrors(t *testing.T) {
 
 func TestDecodeIntEdgeCases(t *testing.T) {
 	cases := map[string]int64{
-		"i0e":           0,
-		"i-1e":          -1,
+		"i0e":                   0,
+		"i-1e":                  -1,
 		"i9223372036854775807e": 9223372036854775807, // max int64
 	}
 	for in, want := range cases {

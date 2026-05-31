@@ -276,7 +276,7 @@ func TestIsDisallowedIP(t *testing.T) {
 		if ip == nil {
 			t.Fatalf("bad test IP %q", s)
 		}
-		if !isDisallowedIP(ip) {
+		if !IsDisallowedIP(ip) {
 			t.Errorf("expected %s to be disallowed", s)
 		}
 	}
@@ -287,7 +287,7 @@ func TestIsDisallowedIP(t *testing.T) {
 		if ip == nil {
 			t.Fatalf("bad test IP %q", s)
 		}
-		if isDisallowedIP(ip) {
+		if IsDisallowedIP(ip) {
 			t.Errorf("expected %s to be allowed", s)
 		}
 	}

@@ -1,7 +1,19 @@
 import { useEffect, useState } from 'react'
+import { Loader2, ShieldCheck, ShieldOff, ShieldQuestion, ShieldX, X } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { getBandwidth, setBandwidth, setUserBandwidth, type SeedingProfile } from '@/lib/api'
+import {
+  getBandwidth,
+  getProxy,
+  getUserProxy,
+  proxyFormatError,
+  setBandwidth,
+  setProxy,
+  setUserBandwidth,
+  setUserProxy,
+  type ProxyStatus,
+  type SeedingProfile,
+} from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -134,14 +146,30 @@ export function BandwidthDialog({
   const [serverDefault, setServerDefault] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Tracker proxy. proxyStatus reflects the last probe.
+  const [proxy, setProxyValue] = useState('')
+  const [proxyDefault, setProxyDefault] = useState('')
+  const [proxyStatus, setProxyStatus] = useState<ProxyStatus>('unknown')
+  const [proxyError, setProxyError] = useState('')
+  const [proxyProbing, setProxyProbing] = useState(false)
+  const isSelf = username === undefined
+
   useEffect(() => {
     if (!open) return
-    if (username === undefined) {
+    if (isSelf) {
       getBandwidth()
         .then((info) => {
           setValue(formatRateInput(info.bandwidth))
           setHalfSat(info.halfSaturation)
           setServerDefault(info.default)
+        })
+        .catch((e) => toast.error(e instanceof Error ? e.message : 'Load failed'))
+      getProxy()
+        .then((info) => {
+          setProxyValue(info.proxy)
+          setProxyDefault(info.default)
+          setProxyStatus(info.status)
+          setProxyError(info.error ?? '')
         })
         .catch((e) => toast.error(e instanceof Error ? e.message : 'Load failed'))
       return
@@ -150,14 +178,46 @@ export function BandwidthDialog({
     setValue(formatRateInput(initialBytes ?? 0))
     setHalfSat(initialHalfSat || 4)
     setServerDefault(null)
-  }, [open, username, initialBytes, initialHalfSat])
+    getUserProxy(username)
+      .then((info) => {
+        setProxyValue(info.proxy)
+        setProxyDefault(info.default)
+        setProxyStatus(info.status)
+        setProxyError(info.error ?? '')
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : 'Load failed'))
+  }, [open, username, isSelf, initialBytes, initialHalfSat])
+
+  const proxyFmtErr = proxyFormatError(proxy)
+
+  const saveProxy = async () => {
+    setProxyProbing(true)
+    try {
+      const info = await (isSelf ? setProxy(proxy.trim()) : setUserProxy(username, proxy.trim()))
+      setProxyValue(info.proxy)
+      setProxyStatus(info.status)
+      setProxyError(info.error ?? '')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not set proxy')
+    } finally {
+      setProxyProbing(false)
+    }
+  }
 
   const onSave = async () => {
+    if (proxyFmtErr) {
+      toast.error(proxyFmtErr)
+      return
+    }
     setSaving(true)
     try {
       if (username === undefined) await setBandwidth(value.trim(), halfSat)
       else await setUserBandwidth(username, value.trim(), halfSat)
-      toast.success('Bandwidth updated')
+      const info = await (isSelf ? setProxy(proxy.trim()) : setUserProxy(username, proxy.trim()))
+      setProxyValue(info.proxy)
+      setProxyStatus(info.status)
+      setProxyError(info.error ?? '')
+      toast.success('Saved')
       onSaved?.()
       onOpenChange(false)
     } catch (e) {
@@ -242,11 +302,88 @@ export function BandwidthDialog({
               bandwidth={parseRateInput(value) || serverDefault || 0}
             />
           </div>
+
+          <div className="grid gap-1.5 py-2">
+              <Label htmlFor="proxy-input">Tracker proxy</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="proxy-input"
+                  value={proxy}
+                  onChange={(e) => {
+                    setProxyValue(e.target.value)
+                    setProxyStatus('unknown')
+                    setProxyError('')
+                  }}
+                  placeholder={proxyDefault ? `default: ${proxyDefault}` : 'scheme://host:port (empty = direct)'}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span
+                  className="flex w-5 shrink-0 justify-center"
+                  title={
+                    proxyProbing
+                      ? 'Testing…'
+                      : proxyStatus === 'ok'
+                        ? 'Proxy reachable'
+                        : proxyStatus === 'error'
+                          ? proxyError
+                          : proxyStatus === 'direct'
+                            ? 'Announcing directly'
+                            : 'Not tested yet'
+                  }
+                >
+                  {proxyProbing ? (
+                    <Loader2 className="text-muted-foreground size-4 animate-spin" aria-label="testing proxy" />
+                  ) : proxyStatus === 'ok' ? (
+                    <ShieldCheck className="size-4 text-emerald-500" aria-label="proxy reachable" />
+                  ) : proxyStatus === 'error' ? (
+                    <ShieldX className="text-destructive size-4" aria-label="proxy error" />
+                  ) : proxyStatus === 'direct' ? (
+                    <ShieldOff className="text-muted-foreground size-4" aria-label="announcing directly" />
+                  ) : (
+                    <ShieldQuestion className="text-muted-foreground size-4" aria-label="not tested" />
+                  )}
+                </span>
+                {proxy && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Clear proxy"
+                    onClick={() => {
+                      setProxyValue('')
+                      setProxyStatus('unknown')
+                      setProxyError('')
+                    }}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void saveProxy()}
+                  disabled={proxyProbing || proxyFmtErr !== null}
+                >
+                  {proxyProbing ? 'Testing…' : 'Test'}
+                </Button>
+              </div>
+              {proxyFmtErr ? (
+                <p className="text-destructive text-xs">{proxyFmtErr}</p>
+              ) : proxyStatus === 'error' ? (
+                <p className="text-destructive text-xs">{proxyError}</p>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Empty announces directly. Routes all your tracker traffic through this proxy.
+                </p>
+              )}
+            </div>
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={saving}>Cancel</Button>
             </DialogClose>
-            <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+            <Button type="submit" disabled={saving || proxyFmtErr !== null}>{saving ? 'Saving…' : 'Save'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

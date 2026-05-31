@@ -44,7 +44,10 @@ type Params struct {
 	HTTPClient *http.Client
 }
 
-func isDisallowedIP(ip net.IP) bool {
+// IsDisallowedIP reports whether ip is one we refuse to connect to: loopback,
+// private, link-local, or unspecified. Exported so other packages can apply the
+// same policy (e.g. user-configured proxies).
+func IsDisallowedIP(ip net.IP) bool {
 	return ip.IsLoopback() || ip.IsPrivate() ||
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
 		ip.IsUnspecified()
@@ -58,12 +61,18 @@ var safeDialer = &net.Dialer{
 			return err
 		}
 		ip := net.ParseIP(host) // address is already resolved here
-		if ip == nil || isDisallowedIP(ip) {
+		if ip == nil || IsDisallowedIP(ip) {
 			return fmt.Errorf("blocked address: %s", address)
 		}
 		return nil
 	},
 }
+
+// GuardedDialContext dials only public addresses, refusing loopback, private,
+// link-local, and unspecified ones (checked after DNS resolution, so it also
+// stops a hostname that resolves to an internal address). Reused by callers
+// that must not be pointed at internal hosts, such as user-configured proxies.
+var GuardedDialContext = safeDialer.DialContext
 
 // defaultClient is the fallback used by Announce when Params.HTTPClient is
 // nil. Reusing one Client (one transport) isolates tracker traffic from any

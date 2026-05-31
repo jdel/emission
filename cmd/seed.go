@@ -63,7 +63,12 @@ func runSeed(_ *cobra.Command, _ []string) error {
 	log.Info().Str("version", c.Version).Str("peer_id", c.PeerID).Msg("client")
 	log.Info().Uint64("userBandwidth", bandwidth).Msg("speed limit")
 
-	mgr := seeder.New(c, torrentsDir, viper.GetFloat64("client.max-ratio"), viper.GetBool("client.autoremove"), bandwidth)
+	proxyURL, err := configuredProxy()
+	if err != nil {
+		return err
+	}
+
+	mgr := seeder.New(c, torrentsDir, viper.GetFloat64("client.max-ratio"), viper.GetBool("client.autoremove"), bandwidth, proxyURL)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

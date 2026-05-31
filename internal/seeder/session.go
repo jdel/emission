@@ -273,7 +273,7 @@ func (s *session) runTracker(ts *trackerState) {
 			Downloaded: s.meta.Length,
 			Event:      ev,
 			TrackerID:  tid,
-			HTTPClient: s.mgr.httpClient,
+			HTTPClient: s.mgr.announceClient(s.owner),
 		}
 	}
 
@@ -290,7 +290,8 @@ func (s *session) runTracker(ts *trackerState) {
 	ts.apply(resp, err)
 	interval = clampMin(pickInterval(resp, err, 30*time.Minute), knownMin)
 	ts.setNext(interval)
-	logAnnounce(s.meta.Name, ts.url, tracker.EventStarted, resp, err, s.uploaded.Load(), interval)
+	proxy, _ := s.mgr.UserProxy(s.owner)
+	logAnnounce(s.meta.Name, ts.url, tracker.EventStarted, resp, err, s.uploaded.Load(), interval, proxy)
 	s.saveStateFile()
 
 	timer := time.NewTimer(interval)
@@ -301,7 +302,8 @@ func (s *session) runTracker(ts *trackerState) {
 			stopCtx, cancel := context.WithTimeout(context.Background(), stopAnnounceTimeout)
 			resp, err := tracker.Announce(stopCtx, ts.url, s.meta, s.client, params(tracker.EventStopped))
 			cancel()
-			logAnnounce(s.meta.Name, ts.url, tracker.EventStopped, resp, err, s.uploaded.Load(), 0)
+			proxy, _ := s.mgr.UserProxy(s.owner)
+			logAnnounce(s.meta.Name, ts.url, tracker.EventStopped, resp, err, s.uploaded.Load(), 0, proxy)
 			s.saveStateFile()
 			return
 		case <-timer.C:
@@ -315,7 +317,8 @@ func (s *session) runTracker(ts *trackerState) {
 		}
 		next = clampMin(next, knownMin)
 		ts.setNext(next)
-		logAnnounce(s.meta.Name, ts.url, tracker.EventNone, resp, err, s.uploaded.Load(), next)
+		proxy, _ = s.mgr.UserProxy(s.owner)
+		logAnnounce(s.meta.Name, ts.url, tracker.EventNone, resp, err, s.uploaded.Load(), next, proxy)
 		s.saveStateFile()
 		interval = next
 		timer.Reset(next)
@@ -407,12 +410,12 @@ func stateName(v int32) string {
 	}
 }
 
-func logAnnounce(name, url string, ev tracker.Event, resp *tracker.Response, err error, uploaded uint64, next time.Duration) {
+func logAnnounce(name, url string, ev tracker.Event, resp *tracker.Response, err error, uploaded uint64, next time.Duration, proxy string) {
 	if err != nil {
-		log.Error().Err(err).Str("torrent", name).Str("tracker", url).Str("event", string(ev)).Msg("announce failed")
+		log.Error().Err(err).Str("torrent", name).Str("tracker", url).Str("proxy", proxy).Str("event", string(ev)).Msg("announce failed")
 		return
 	}
-	e := log.Debug().Str("torrent", name).Str("tracker", url).Str("event", string(ev)).
+	e := log.Debug().Str("torrent", name).Str("tracker", url).Str("proxy", proxy).Str("event", string(ev)).
 		Int("seeders", resp.Seeders).Int("leechers", resp.Leechers).
 		Str("uploaded", units.FormatBytes(uploaded)).
 		Str("interval", resp.Interval.String()).

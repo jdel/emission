@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -11,7 +12,24 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/jdel/emission/internal/seeder"
 )
+
+// configuredProxy returns the validated --client.proxy URL (empty = announce
+// directly), the server-wide default every user inherits. As the admin-set
+// value it is trusted: unlike user-set proxies it may point at a local/private
+// address. It must still be a strict scheme://host:port URL (http/https/socks5).
+func configuredProxy() (string, error) {
+	fixed := strings.TrimSpace(viper.GetString("client.proxy"))
+	if fixed == "" {
+		return "", nil
+	}
+	if err := seeder.ValidateProxyURL(fixed); err != nil {
+		return "", fmt.Errorf("invalid --client.proxy: %w", err)
+	}
+	return fixed, nil
+}
 
 var version = "dev"
 
@@ -47,12 +65,13 @@ func RootCmd() *cobra.Command {
 	cmd.PersistentFlags().Int("client.max-peers", 0, "peers to request from each tracker (0 = client default)")
 	cmd.PersistentFlags().Float64("client.max-ratio", 0, "stop accumulating upload once uploaded reaches N × torrent size (0 = unlimited)")
 	cmd.PersistentFlags().Bool("client.autoremove", false, "automatically remove the torrent when the ratio cap is reached")
+	cmd.PersistentFlags().String("client.proxy", "", "route all tracker traffic through this proxy (http/https/socks5); empty = announce directly")
 
 	for _, name := range []string{
 		"config", "log-level",
 		"storage.torrents",
 		"client.name", "client.bandwidth", "client.max-peers", "client.max-ratio",
-		"client.autoremove",
+		"client.autoremove", "client.proxy",
 	} {
 		_ = viper.BindPFlag(name, cmd.PersistentFlags().Lookup(name))
 	}

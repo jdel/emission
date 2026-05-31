@@ -37,7 +37,7 @@ func newAuthServer(t *testing.T) (*server, *auth.Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<30)
+	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<30, "")
 	t.Cleanup(mgr.Shutdown)
 	srv := &server{
 		mgr:         mgr,
@@ -141,6 +141,8 @@ func TestAdminRoutesRejectNonAdmin(t *testing.T) {
 		{"remove credential", srv.authRemoveCredential},
 		{"remove user", srv.authRemoveUser},
 		{"set user bandwidth", srv.setUserBandwidth},
+		{"get user proxy", srv.getUserProxyAdmin},
+		{"set user proxy", srv.setUserProxyAdmin},
 		{"list invites", srv.authListInvites},
 		{"revoke invite", srv.authRevokeInvite},
 	}
@@ -154,6 +156,57 @@ func TestAdminRoutesRejectNonAdmin(t *testing.T) {
 				t.Errorf("%s: status %d, want 403", rt.name, w.Code)
 			}
 		})
+	}
+}
+
+// TestUserProxyAdmin confirms an admin can read and set any user's tracker
+// proxy, that the SSRF guard and username validation still apply, and that a
+// non-admin is refused.
+func TestUserProxyAdmin(t *testing.T) {
+	srv, svc := newAuthServer(t)
+	alice := cookieFor(t, svc, "alice")
+	admin := cookieFor(t, svc, auth.AdminUsername)
+
+	getUser := func(c *http.Cookie, username string) (int, proxyInfo) {
+		r := httptest.NewRequest(http.MethodGet, "/api/auth/users/"+username+"/proxy", nil)
+		r.SetPathValue("username", username)
+		r.AddCookie(c)
+		w := httptest.NewRecorder()
+		srv.getUserProxyAdmin(w, r)
+		var pi proxyInfo
+		_ = json.NewDecoder(w.Body).Decode(&pi)
+		return w.Code, pi
+	}
+	setUser := func(c *http.Cookie, username, body string) (int, proxyInfo) {
+		r := httptest.NewRequest(http.MethodPut, "/api/auth/users/"+username+"/proxy", strings.NewReader(body))
+		r.SetPathValue("username", username)
+		r.AddCookie(c)
+		w := httptest.NewRecorder()
+		srv.setUserProxyAdmin(w, r)
+		var pi proxyInfo
+		_ = json.NewDecoder(w.Body).Decode(&pi)
+		return w.Code, pi
+	}
+
+	// admin sets bob's proxy: well-formed but unreachable → saved (status error).
+	if code, pi := setUser(admin, "bob", `{"proxy":"http://proxy.invalid:9"}`); code != http.StatusOK || pi.Proxy != "http://proxy.invalid:9" {
+		t.Fatalf("admin set bob: code %d pi %+v", code, pi)
+	}
+	// admin reads bob's proxy back.
+	if code, pi := getUser(admin, "bob"); code != http.StatusOK || pi.Proxy != "http://proxy.invalid:9" {
+		t.Errorf("admin get bob: code %d pi %+v", code, pi)
+	}
+	// local/private address rejected (SSRF guard).
+	if code, _ := setUser(admin, "bob", `{"proxy":"http://127.0.0.1:8080"}`); code != http.StatusBadRequest {
+		t.Errorf("admin set local: %d, want 400", code)
+	}
+	// invalid username (digits disallowed) rejected before any mutation.
+	if code, _ := setUser(admin, "b0b", `{"proxy":""}`); code != http.StatusBadRequest {
+		t.Errorf("invalid username: %d, want 400", code)
+	}
+	// non-admin cannot edit another user.
+	if code, _ := setUser(alice, "bob", `{"proxy":""}`); code != http.StatusForbidden {
+		t.Errorf("alice→bob: %d, want 403", code)
 	}
 }
 
@@ -214,7 +267,7 @@ func newAuthServerWithTorrents(t *testing.T) (*server, *auth.Service, string, st
 	if err != nil {
 		t.Fatal(err)
 	}
-	mgr := seeder.New(c, dir, 0, false, 1<<30)
+	mgr := seeder.New(c, dir, 0, false, 1<<30, "")
 	t.Cleanup(trk.Close) // closed after mgr.Shutdown (LIFO) so stop-announces hit a live server
 	t.Cleanup(mgr.Shutdown)
 	creds, err := auth.LoadCredentials(filepath.Join(t.TempDir(), "k.json"))
