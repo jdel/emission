@@ -4,6 +4,22 @@ All notable changes to emission are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.3.0] - 2026-05-31
+
+### Added
+- Tracker proxy: a server-wide `--client.proxy` default (http/https/socks5) that every user inherits, plus per-user overrides set from the UI. User-supplied proxies are SSRF-guarded (rejected if they point at a loopback/private/link-local address, and dialed through the same guard so a hostname resolving to an internal address fails too); the admin-set CLI default is trusted. Each proxy is probed for reachability and its status surfaced.
+- Admin can filter the main torrent list by owner (server-side, so it works across pagination), via a username dropdown mirroring the users list.
+- `emission where` command — prints the resolved data and config directories and the config file viper loaded.
+- Torrent cards show how long each torrent has been up, as a relative duration in the status tooltip.
+
+### Changed
+- **Breaking:** the seeding profile is now a numeric half-saturation curve instead of a fixed enum; `stealth` / `normal` / `aggressive` are display labels for half-saturation presets (10 / 4 / 1) and any value is accepted.
+- Reworked the admin invite graph as a tidy top-down tree (d3-hierarchy) with pending invites shown as blue-outlined nodes and a finer zoom step.
+- Extracted the HTTP API/UI server out of the `cmd` package into `internal/api`, split by concern (server, middleware, auth, ratelimit, torrents, bandwidth, proxy, ws) — internal refactor, no behavior change.
+
+### Fixed
+- `/start/` (with a trailing slash) now redirects to `/start` so the admin-bootstrap screen loads instead of falling through to the login screen.
+
 ## [0.2.0] - 2026-05-30
 
 ### Added
