@@ -89,8 +89,8 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            bundles: app,dmg
-            artifact: tauri/target/release/bundle/dmg/*.dmg
+            bundles: app
+            artifact: tauri/target/release/bundle/macos/*.zip
           - os: windows-latest
             bundles: nsis
             artifact: tauri/target/release/bundle/nsis/*-setup.exe
@@ -154,6 +154,13 @@ jobs:
       - name: Build desktop app
         shell: bash
         run: cd tauri && tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Zip macOS app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd tauri/target/release/bundle/macos
+          ditto -c -k --keepParent *.app "Emission_${GITHUB_REF_NAME#v}_macos.zip"
 
       - name: Upload installer to release
         shell: bash
