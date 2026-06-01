@@ -4,6 +4,18 @@ All notable changes to emission are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.3.1] - 2026-06-01
+
+### Added
+- Desktop app: native builds (powered by Tauri) that wrap the seeder and web UI in a single window, shipped as `.dmg` (macOS), `.exe` (Windows), and `.AppImage` (Linux) installers on the releases page. New satellite-dish app icon and favicon across the UI.
+- The per-user bandwidth control is now available in the web UI when authentication is disabled — previously it only appeared with auth on.
+
+### Changed
+- With authentication disabled the implicit user is now `admin`: uploads go to `admin/` and bandwidth is keyed to that account, instead of the unnamed root bucket.
+- The default `--storage.torrents` directory is now the XDG data directory itself (`~/.local/share/emission/`) rather than a nested `torrents/` subdirectory.
+- Renamed the per-user settings file from `.emission-users.json` to `client-settings.json`.
+- Torrent cards show the "added … ago" time using the same precise duration as the status tooltip.
+
 ## [0.3.0] - 2026-05-31
 
 ### Added
