@@ -36,7 +36,7 @@ blend in with legitimate peers.
 Native desktop builds (powered by [Tauri](https://tauri.app/)) wrap the seeder
 and web UI in a single window — no terminal, no flags. Grab the installer for
 your platform from the [releases page](https://github.com/jdel/emission/releases):
-`.zip` (macOS), `.exe` (Windows), or `.AppImage` (Linux). Data lives under
+`.zip` (macOS), `.exe` (Windows), or `.AppImage`/`.deb`/`.rpm` (Linux). Data lives under
 `emission-desktop/` in your platform's data directory.
 
 > The desktop builds are unsigned, so macOS Gatekeeper and Windows SmartScreen

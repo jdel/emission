@@ -95,8 +95,8 @@ jobs:
             bundles: nsis
             artifact: tauri/target/release/bundle/nsis/*-setup.exe
           - os: ubuntu-latest
-            bundles: appimage
-            artifact: tauri/target/release/bundle/appimage/*.AppImage
+            bundles: appimage,deb,rpm
+            artifact: tauri/target/release/bundle/appimage/*.AppImage tauri/target/release/bundle/deb/*.deb tauri/target/release/bundle/rpm/*.rpm
     runs-on: ${{ matrix.os }}
 
     steps:
