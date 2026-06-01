@@ -167,3 +167,32 @@ jobs:
         run: gh release upload "$GITHUB_REF_NAME" ${{ matrix.artifact }} --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create tap token
+        id: tap-token
+        if: runner.os == 'macOS'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.JDEL_CROSS_REPO_PUSHER_APP_ID }}
+          private-key: ${{ secrets.JDEL_CROSS_REPO_PUSHER_PRIVATE_KEY }}
+          owner: "jdel"
+          repositories: "homebrew-tap"
+
+      - name: Publish emission-desktop cask
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          zip="tauri/target/release/bundle/macos/Emission_${version}_macos.zip"
+          sha=$(shasum -a 256 "$zip" | awk '{print $1}')
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/jdel/homebrew-tap.git" tap
+          sed -e "s/{{VERSION}}/${version}/g" -e "s/{{SHA256}}/${sha}/g" \
+              .emission-desktop.rb.tmpl > tap/Casks/emission-desktop.rb
+          cd tap
+          git config user.name "emission[bot]"
+          git config user.email "noreply@jdel.org"
+          git add Casks/emission-desktop.rb
+          git diff --cached --quiet || git commit -m "emission-desktop ${version}"
+          git push
