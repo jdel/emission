@@ -1,10 +1,11 @@
-import { type RefObject } from 'react'
+import { type RefObject, useState } from 'react'
 import { Gauge, LogOut, Menu, Moon, Plus, Smartphone, Sun, User, Users, UserPlus } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { DropdownMenu } from 'radix-ui'
 
 import { logout } from '@/lib/api'
 import { AuthControls, type AuthControlsHandle } from '@/components/auth-controls'
+import { BandwidthDialog } from '@/components/bandwidth-dialog'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 
@@ -37,6 +38,9 @@ export function DashboardHeader({
   onSignedOut,
 }: DashboardHeaderProps) {
   const { resolvedTheme, setTheme } = useTheme()
+  // With auth off, AuthControls (which hosts the bandwidth dialog) is not
+  // rendered, so surface "My bandwidth" from the header itself.
+  const [bwOpen, setBwOpen] = useState(false)
 
   return (
     <header className="bg-background/75 border-border/60 sticky top-0 z-10 -mx-4 mb-8 flex items-center justify-between border-b px-4 py-3 backdrop-blur-md">
@@ -81,6 +85,16 @@ export function DashboardHeader({
             Add torrent
           </Button>
           <ThemeToggle />
+          {!authEnabled && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="My bandwidth"
+              onClick={() => setBwOpen(true)}
+            >
+              <Gauge className="size-4" />
+            </Button>
+          )}
           {authEnabled && (
             <AuthControls ref={authRef} username={username} onSignedOut={onSignedOut} />
           )}
@@ -141,6 +155,13 @@ export function DashboardHeader({
                   {resolvedTheme === 'dark' ? 'Light mode' : 'Dark mode'}
                 </DropdownMenu.Item>
 
+                {/* Bandwidth (auth off only; with auth it lives in AuthControls) */}
+                {!authEnabled && (
+                  <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setBwOpen(true)}>
+                    <Gauge className="size-4" /> My bandwidth
+                  </DropdownMenu.Item>
+                )}
+
                 {/* Auth actions */}
                 {authEnabled && (
                   <>
@@ -172,6 +193,7 @@ export function DashboardHeader({
           </DropdownMenu.Root>
         </div>
       </div>
+      {!authEnabled && <BandwidthDialog open={bwOpen} onOpenChange={setBwOpen} />}
     </header>
   )
 }
