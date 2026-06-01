@@ -25,42 +25,22 @@ blend in with legitimate peers.
 - Clean "stopped" announce sent to each tracker on shutdown.
 - Reports `downloaded = torrent size` (complete seeder from day one).
 
-### How the rate is calculated
-
-Each torrent targets a fraction of its max upload rate based on how many
-leechers are in the swarm, using a hyperbolic curve:
-
-```
-rate = maxRate × L / (L + halfSaturation)
-```
-
-`L` is the leecher count and `halfSaturation` is the leecher count at which
-the rate reaches half of `maxRate`. A preset sets it — **stealth** = 10 (only
-ramps up in big swarms), **normal** = 4 (default), **aggressive** = 1 (near-max
-on almost any demand) — or you can pick any value in between. The rate climbs
-fast at first, then flattens
-as it approaches `maxRate` — it never quite reaches it. A ±20% jitter is applied
-each second so the traffic looks organic, and the per-user bandwidth ceiling
-caps the sum across all of that user's torrents.
-
-### Tracker proxying
-
-By default emission announces directly. Set `--client.proxy` to route **all**
-tracker traffic — for every user — through one proxy you control:
-
-```sh
-emission serve --client.proxy socks5://10.0.0.1:1080   # or http://, https://
-```
-
-Use a proxy you trust: tracker announce URLs can carry private-tracker secrets
-(passkeys), so the proxy operator sees them. Free/public proxy lists are not a
-good fit for this — point it at your own VPN gateway or SOCKS endpoint instead.
-
 ![Screenshot](screenshot.png)
 
 ---
 
 ## Install
+
+### Desktop app
+
+Native desktop builds (powered by [Tauri](https://tauri.app/)) wrap the seeder
+and web UI in a single window — no terminal, no flags. Grab the installer for
+your platform from the [releases page](https://github.com/jdel/emission/releases):
+`.dmg` (macOS), `.exe` (Windows), or `.AppImage` (Linux). Data lives under
+`emission-desktop/` in your platform's data directory.
+
+> The desktop builds are unsigned, so macOS Gatekeeper and Windows SmartScreen
+> will warn on first launch.
 
 ### Linux / macOS
 
@@ -280,37 +260,6 @@ connection. Only run an auth-off instance on a network you trust.
 
 ---
 
-## API
-
-`serve --http.api` exposes a JSON REST API.
-
-Interactive docs at `/docs` (Swagger UI).
-Full spec at `/docs/swagger.json`.
-
-```
-GET    /api/torrents               list torrents (paged: ?limit, ?offset, ?q)
-POST   /api/torrents               upload a .torrent (multipart: file, max-speed, max-ratio)
-GET    /api/torrents/{id}/stats    rate/leecher history for one torrent
-PATCH  /api/torrents/{id}          update per-torrent overrides {maxSpeed, maxRatio, deleteOnCap}
-DELETE /api/torrents/{id}          stop and remove a torrent
-GET    /api/ws                     WebSocket: live stats + list-changed events
-GET    /api/bandwidth              caller's own upload bandwidth + seeding profile
-PUT    /api/bandwidth              update caller's own bandwidth + profile
-GET    /api/auth/status            auth state
-POST   /api/auth/login/begin       passkey login (WebAuthn)
-POST   /api/auth/invite            create invite link (any authenticated user)
-PUT    /api/auth/users/{u}/bandwidth   set another user's bandwidth (admin)
-...                                full spec at /docs
-```
-
-The WebSocket pushes several message types:
-- `{type:"stats", torrents:[…]}` — live snapshot of every visible torrent, ~once per second.
-- `{type:"changed"}` — torrent list added or removed.
-- `{type:"stats_history", history:{<id>:[…]}}` — full rate/leecher history on connect.
-- `{type:"stat_point", id:"…", point:{…}}` — one new history data point (~every 30 s).
-
----
-
 ## Authentication
 
 **Off by default.** With auth off, anyone who reaches the port can use
@@ -439,23 +388,36 @@ Env var mapping: `EMISSION_` prefix, dots and dashes → underscores.
 
 ---
 
-## Project layout
+## How the rate is calculated
+
+Each torrent targets a fraction of its max upload rate based on how many
+leechers are in the swarm, using a hyperbolic curve:
 
 ```
-main.go                CLI entry point — calls into cmd
-cmd/                   Cobra commands (root, seed, serve, clients) + HTTP handlers
-internal/auth/         Passkey/WebAuthn auth (credentials, sessions, invites)
-internal/bencode/      Bencode decoder
-internal/client/       BitTorrent client identity generator (85+ profiles)
-internal/docs/         Generated Swagger spec (from `make swagger`)
-internal/seeder/       Seeding engine — Manager + per-torrent sessions
-internal/torrent/      .torrent metadata parser
-internal/tracker/      HTTP tracker announce
-internal/units/        Human-readable rate parser/formatter
-internal/web/          Embeds the built web UI
-ui/                    React 19 + Tailwind v4 + shadcn/ui web frontend
-example/               Sample deployments (docker-compose + traefik)
+rate = maxRate × L / (L + halfSaturation)
 ```
+
+`L` is the leecher count and `halfSaturation` is the leecher count at which
+the rate reaches half of `maxRate`. A preset sets it — **stealth** = 10 (only
+ramps up in big swarms), **normal** = 4 (default), **aggressive** = 1 (near-max
+on almost any demand) — or you can pick any value in between. The rate climbs
+fast at first, then flattens
+as it approaches `maxRate` — it never quite reaches it. A ±20% jitter is applied
+each second so the traffic looks organic, and the per-user bandwidth ceiling
+caps the sum across all of that user's torrents.
+
+## Tracker proxying
+
+By default emission announces directly. Set `--client.proxy` to route **all**
+tracker traffic — for every user — through one proxy you control:
+
+```sh
+emission serve --client.proxy socks5://10.0.0.1:1080   # or http://, https://
+```
+
+Use a proxy you trust: tracker announce URLs can carry private-tracker secrets
+(passkeys), so the proxy operator sees them. Free/public proxy lists are not a
+good fit for this — point it at your own VPN gateway or SOCKS endpoint instead.
 
 ---
 
@@ -463,9 +425,10 @@ example/               Sample deployments (docker-compose + traefik)
 
 ### Prerequisites
 
-- Go **1.26.2+**
+- Go **1.26.3+**
 - Node **20+** and npm
 - `make`
+- Rust (only for the `make tauri-*` desktop builds) — see [rustup.rs](https://rustup.rs)
 
 ### From source
 
@@ -502,10 +465,12 @@ make vet           # go vet ./cmd/... ./internal/...
 make build         # build the binary
 make ui            # build only the React UI into internal/web/dist
 make dist          # cross-compile matrix
+make tauri-run     # run the desktop app (Tauri) in dev
+make tauri-build   # package the desktop app for the host OS
 make swagger       # regenerate internal/docs from handler godoc annotations
 make sync-clients  # regenerate internal/client/clients/*.json from upstream
 make docker        # multi-arch docker image
-make clean         # remove dist/ and ./emission
+make clean         # remove all build/generated artifacts (incl. gitignored)
 ```
 
 ## Development
