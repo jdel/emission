@@ -9,7 +9,7 @@ import (
 
 // userSettingsFileName is the per-owner settings file, stored in the watched
 // root. It is not a .torrent, so the directory watcher ignores it.
-const userSettingsFileName = ".emission-users.json"
+const userSettingsFileName = "client-settings.json"
 
 // Seeding profiles control how steeply a torrent's reported rate ramps with its
 // leecher count: halfSaturation is the leecher count at which it reaches half
