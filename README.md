@@ -42,6 +42,21 @@ your platform from the [releases page](https://github.com/jdel/emission/releases
 > The desktop builds are unsigned, so macOS Gatekeeper and Windows SmartScreen
 > will warn on first launch.
 
+### Homebrew (macOS)
+
+Both ship as casks in [`jdel/homebrew-tap`](https://github.com/jdel/homebrew-tap):
+
+```sh
+# CLI
+brew install --cask jdel/tap/emission
+
+# Desktop app (Apple Silicon)
+brew install --cask jdel/tap/emission-desktop
+```
+
+The casks strip the quarantine flag on install, so Gatekeeper won't block the
+unsigned binaries on first run.
+
 ### Linux / macOS
 
 Download the right archive for your platform from the
