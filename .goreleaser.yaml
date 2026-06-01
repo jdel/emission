@@ -78,21 +78,26 @@ dockers_v2:
     flags:
       - "--pull"
 
-brews:
+homebrew_casks:
   - name: emission
-    directory: Formula
     repository:
       owner: jdel
       name: homebrew-tap
       token: "{{ .Env.GITHUB_APP_TOKEN }}"
-    url_template: "https://github.com/jdel/emission/releases/download/{{ .Tag }}/emission-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}.tar.gz"
+    url:
+      template: "https://github.com/jdel/emission/releases/download/{{ .Tag }}/emission-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}.tar.gz"
+      verified: "github.com/jdel/emission/"
     homepage: "https://github.com/jdel/emission"
     description: "Spoof BitTorrent tracker announces to boost your ratio"
     skip_upload: auto
     commit_author:
       name: emission[bot]
       email: noreply@jdel.org
-    test: |
-      system "#{bin}/emission --help"
-    install: |
-      bin.install "emission"
+    # The released binary is unsigned; strip the quarantine flag so macOS
+    # Gatekeeper doesn't kill it on first run after a cask install.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/emission"]
+          end
