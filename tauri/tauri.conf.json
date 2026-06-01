@@ -21,6 +21,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["bin/emission"]
+    "resources": ["bin/emission*"]
   }
 }
