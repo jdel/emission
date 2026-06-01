@@ -66,7 +66,7 @@ func TestBandwidthEndpoints(t *testing.T) {
 	}
 	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<20, "") // 1M default
 	t.Cleanup(mgr.Shutdown)
-	srv := &server{mgr: mgr, torrentsDir: t.TempDir()} // auth nil → owner ""
+	srv := &server{mgr: mgr, torrentsDir: t.TempDir()} // auth nil → owner "admin"
 
 	// GET own → default.
 	rec := httptest.NewRecorder()
@@ -92,13 +92,13 @@ func TestBandwidthEndpoints(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("PUT code %d body %s", rec.Code, rec.Body)
 	}
-	if got := mgr.Bandwidth(""); got != 2<<20 {
+	if got := mgr.Bandwidth("admin"); got != 2<<20 {
 		t.Errorf("after PUT, bandwidth = %d, want 2<<20", got)
 	}
-	if got := mgr.HalfSaturation(""); got != 1 {
+	if got := mgr.HalfSaturation("admin"); got != 1 {
 		t.Errorf("after PUT, halfSaturation = %v, want 1", got)
 	}
-	if got := mgr.Profile(""); got != "aggressive" {
+	if got := mgr.Profile("admin"); got != "aggressive" {
 		t.Errorf("after PUT, profile = %q, want aggressive", got)
 	}
 
@@ -124,7 +124,7 @@ func TestProxyEndpoints(t *testing.T) {
 	}
 	mgr := seeder.New(c, t.TempDir(), 0, false, 1<<20, "") // no default proxy
 	t.Cleanup(mgr.Shutdown)
-	srv := &server{mgr: mgr, torrentsDir: t.TempDir()} // auth nil → owner ""
+	srv := &server{mgr: mgr, torrentsDir: t.TempDir()} // auth nil → owner "admin"
 
 	get := func() proxyInfo {
 		rec := httptest.NewRecorder()

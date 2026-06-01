@@ -585,9 +585,13 @@ func (s *server) authorizeTorrent(w http.ResponseWriter, r *http.Request, id str
 }
 
 // viewer returns the visibility scope for a request: the empty string means
-// "see everything" (admin or auth disabled); otherwise the caller's own
-// username restricts the list to their own torrents plus root-level ones.
+// "see everything" (authenticated admin); otherwise the caller's own username
+// restricts the list to their own torrents plus root-level ones. With auth
+// disabled the implicit user is admin, scoped to their own uploads plus root.
 func (s *server) viewer(r *http.Request) string {
+	if s.auth == nil {
+		return auth.AdminUsername
+	}
 	username, ok := s.sessionUsername(r)
 	if !ok || username == auth.AdminUsername {
 		return ""
@@ -597,10 +601,11 @@ func (s *server) viewer(r *http.Request) string {
 
 // uploader returns the storage subdirectory for uploads: the authenticated
 // username when auth is enabled (so admin uploads go to admin/, regular users
-// to their own subdir), or "" when auth is disabled (uploads go to the root).
+// to their own subdir). With auth disabled the implicit user is admin, so
+// uploads go to admin/ as well.
 func (s *server) uploader(r *http.Request) string {
 	if s.auth == nil {
-		return ""
+		return auth.AdminUsername
 	}
 	username, _ := s.sessionUsername(r)
 	return username

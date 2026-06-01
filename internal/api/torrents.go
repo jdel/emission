@@ -114,9 +114,9 @@ func (s *server) uploadTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve a safe target path. A regular user's torrents go in their own
-	// subdirectory; the admin's (and auth-disabled) go in the storage root —
-	// that is exactly what viewer() returns.
+	// Resolve a safe target path. Every user's torrents go in their own
+	// subdirectory — including the admin's, and the implicit admin when auth
+	// is disabled — which is exactly what uploader() returns.
 	target, err := s.safeTargetPath(s.uploader(r), header.Filename)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
