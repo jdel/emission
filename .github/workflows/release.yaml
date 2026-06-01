@@ -75,3 +75,86 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_APP_TOKEN: ${{ steps.token.outputs.token }}
+
+  # goreleaser builds the Go CLI; it cannot build Tauri apps. This job runs on
+  # native runners per OS, bundles the host-arch emission binary into a Tauri
+  # desktop installer, and uploads each to the draft release goreleaser created
+  # above.
+  tauri:
+    needs: release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            bundles: app,dmg
+            artifact: tauri/target/release/bundle/dmg/*.dmg
+          - os: windows-latest
+            bundles: nsis
+            artifact: tauri/target/release/bundle/nsis/*-setup.exe
+          - os: ubuntu-latest
+            bundles: appimage
+            artifact: tauri/target/release/bundle/appimage/*.AppImage
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri
+
+      - name: Install Linux WebKit dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev libfuse2 patchelf build-essential
+
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make -y
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Set app version from tag
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          tmp=$(mktemp)
+          jq --arg v "$v" '.version = $v' tauri/tauri.conf.json > "$tmp"
+          mv "$tmp" tauri/tauri.conf.json
+
+      - name: Stage binary, UI and icons
+        shell: bash
+        run: make tauri-bin tauri-icon
+
+      - name: Build desktop app
+        shell: bash
+        run: cd tauri && cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Upload installer to release
+        shell: bash
+        run: gh release upload "$GITHUB_REF_NAME" ${{ matrix.artifact }} --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

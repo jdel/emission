@@ -15,9 +15,14 @@ PLATFORMS_BIN := \
 	darwin/arm64 \
 	windows/amd64
 
+# Host platform, for picking the matching slice of the dist matrix.
+HOST_OS   := $(shell go env GOOS)
+HOST_ARCH := $(shell go env GOARCH)
+EXE       := $(if $(filter windows,$(HOST_OS)),.exe,)
+
 export CGO_ENABLED := 0
 
-.PHONY: all build ui swagger dist clean test vet docker docker-load buildx-setup sync-clients help
+.PHONY: all build ui swagger dist clean test vet docker docker-load buildx-setup sync-clients tauri-deps tauri-bin tauri-icon tauri-run tauri-build help
 
 all: build
 
@@ -57,8 +62,16 @@ $(DIST)/%:
 	mkdir -p $(DIST)/$$os/$$arch; \
 	GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags '$(LDFLAGS)' -o $$out $(PKG)
 
+# Remove all build/generated artifacts, including gitignored ones (node_modules,
+# Rust target, generated icons, etc.). Leaves user data alone — config files,
+# secrets/keys, and runtime torrent state are not build output.
 clean:
-	rm -rf $(DIST) $(BINARY)
+	rm -rf $(DIST) $(BINARY) $(BINARY).exe
+	rm -rf tauri/target tauri/gen tauri/bin
+	find tauri/icons -mindepth 1 -maxdepth 1 ! -name icon.png -exec rm -rf {} +
+	rm -rf ui/node_modules ui/.vite
+	rm -f ui/*.log *.test *.prof *.out coverage.html
+	find . -name .DS_Store -delete
 
 buildx-setup:
 	@docker buildx inspect emission-builder >/dev/null 2>&1 || \
@@ -82,6 +95,40 @@ docker-load:
 		-t $(IMAGE):$(IMAGE_TAG) \
 		.
 
+# --- Tauri desktop shell ---------------------------------------------------
+
+# Install the Tauri CLI (needs a Rust toolchain — rustup.rs).
+tauri-deps:
+	cargo install tauri-cli --version "^2" --locked
+
+# Stage the host-arch emission binary where the Tauri bundler expects it
+# (tauri/bin), reusing the matching slice of the `dist` cross-compile matrix.
+# swagger+ui first so the embedded docs/UI match. EXE adds .exe on Windows.
+tauri-bin: swagger ui $(DIST)/$(HOST_OS)/$(HOST_ARCH)
+	mkdir -p tauri/bin
+	cp $(DIST)/$(HOST_OS)/$(HOST_ARCH)/$(BINARY)$(EXE) tauri/bin/$(BINARY)$(EXE)
+
+# Generate the full app icon set (.icns/.ico/pngs) from a square source PNG.
+# Defaults to the committed placeholder; override with SRC=path/to/icon.png.
+tauri-icon:
+	cd tauri && cargo tauri icon $(or $(SRC),icons/icon.png)
+
+# Run the Tauri app in dev. tauri-bin stages the bundled resource (Tauri
+# validates bundle.resources at compile time, dev included); build drops
+# ./emission at the repo root, which the dev app spawns. On macOS the kernel
+# SIGKILLs a loose binary with no valid signature, so ad-hoc sign it first
+# (packaged builds are signed by Tauri as part of the bundle).
+tauri-run: tauri-bin tauri-icon build
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "ad-hoc signing ./$(BINARY) for dev spawn"; \
+		codesign --force --sign - $(BINARY); \
+	fi
+	cd tauri && cargo tauri dev
+
+# Package the Tauri app for the host OS (.app/.dmg on macOS). Needs icons.
+tauri-build: tauri-bin tauri-icon
+	cd tauri && cargo tauri build
+
 help:
 	@echo "Targets:"
 	@echo "  build         build host binary (./$(BINARY))"
@@ -93,6 +140,9 @@ help:
 	@echo "  docker-load   single-arch image into local Docker"
 	@echo "  swagger       regenerate internal/docs from handler godoc annotations"
 	@echo "  sync-clients  regenerate internal/client/clients/*.json from upstream"
+	@echo "  tauri-deps    install the Tauri CLI (needs Rust)"
+	@echo "  tauri-run     run the experimental Tauri shell in dev"
+	@echo "  tauri-build   package the Tauri app for host OS (.app/.dmg on macOS)"
 	@echo "  clean         remove $(DIST)/ and ./$(BINARY)"
 	@echo ""
 	@echo "Vars: VERSION=$(VERSION) IMAGE=$(IMAGE) IMAGE_TAG=$(IMAGE_TAG) PLATFORMS=$(PLATFORMS)"

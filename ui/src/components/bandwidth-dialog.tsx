@@ -237,8 +237,7 @@ export function BandwidthDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             Total upload rate across all torrents on this account, shared between
-            them by leecher count. It is a ceiling, left unused when leechers are
-            scarce.
+            them by leecher count. It is a ceiling.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={(e) => { e.preventDefault(); void onSave() }}>

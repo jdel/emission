@@ -1,0 +1,7 @@
+/target
+/gen
+bin/
+
+# Generated icon set (cargo tauri icon); only the source PNG is tracked.
+/icons/*
+!/icons/icon.png

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Fingerprint, Gauge } from 'lucide-react'
+import { Fingerprint, SatelliteDish } from 'lucide-react'
 
 import { login } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,7 @@ export function Login({ onDone }: { onDone: () => void }) {
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-lg">
-              <Gauge className="size-5" />
+              <SatelliteDish className="size-5" />
             </div>
             <CardTitle className="text-2xl">emission</CardTitle>
           </div>

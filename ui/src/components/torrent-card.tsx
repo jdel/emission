@@ -396,7 +396,7 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
           </div>
 
           <div className="text-muted-foreground bg-muted/30 border-t px-6 py-2 text-xs">
-            added {formatRelative(torrent.addedAt, now)}
+            added {formatUptime(torrent.addedAt, now)} ago
           </div>
         </div>
       )}

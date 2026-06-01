@@ -216,7 +216,7 @@ export function Dashboard({ authEnabled, username, onSignedOut }: DashboardProps
           <p className="text-primary text-lg font-medium">Drop .torrent files to add</p>
         </div>
       )}
-      <div className="mx-auto max-w-3xl px-4 pt-4 pb-8 sm:pt-6 sm:pb-12">
+      <div className="mx-auto max-w-3xl px-4 pb-8 sm:pb-12">
         <DashboardHeader
           authEnabled={authEnabled}
           username={username}

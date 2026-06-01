@@ -1,5 +1,5 @@
 import { type RefObject, useState } from 'react'
-import { Gauge, LogOut, Menu, Moon, Plus, Smartphone, Sun, User, Users, UserPlus } from 'lucide-react'
+import { Gauge, LogOut, Menu, Moon, Plus, SatelliteDish, Smartphone, Sun, User, Users, UserPlus } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { DropdownMenu } from 'radix-ui'
 
@@ -46,7 +46,7 @@ export function DashboardHeader({
     <header className="bg-background/75 border-border/60 sticky top-0 z-10 -mx-4 mb-8 flex items-center justify-between border-b px-4 py-3 backdrop-blur-md">
       <div className="flex items-center gap-3">
         <div className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-lg">
-          <Gauge className="size-5" />
+          <SatelliteDish className="size-5" />
         </div>
         <div>
           <h1 className="text-lg leading-tight font-semibold tracking-tight">emission</h1>
