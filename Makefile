@@ -19,6 +19,9 @@ PLATFORMS_BIN := \
 HOST_OS   := $(shell go env GOOS)
 HOST_ARCH := $(shell go env GOARCH)
 EXE       := $(if $(filter windows,$(HOST_OS)),.exe,)
+# Prefer the npm-distributed `tauri` bin (prebuilt, no compile); fall back to
+# the `cargo tauri` subcommand from `cargo install tauri-cli`.
+TAURI     := $(shell command -v tauri >/dev/null 2>&1 && echo tauri || echo cargo tauri)
 
 export CGO_ENABLED := 0
 
@@ -111,7 +114,7 @@ tauri-bin: swagger ui $(DIST)/$(HOST_OS)/$(HOST_ARCH)
 # Generate the full app icon set (.icns/.ico/pngs) from a square source PNG.
 # Defaults to the committed placeholder; override with SRC=path/to/icon.png.
 tauri-icon:
-	cd tauri && cargo tauri icon $(or $(SRC),icons/icon.png)
+	cd tauri && $(TAURI) icon $(or $(SRC),icons/icon.png)
 
 # Run the Tauri app in dev. tauri-bin stages the bundled resource (Tauri
 # validates bundle.resources at compile time, dev included); build drops
@@ -123,11 +126,11 @@ tauri-run: tauri-bin tauri-icon build
 		echo "ad-hoc signing ./$(BINARY) for dev spawn"; \
 		codesign --force --sign - $(BINARY); \
 	fi
-	cd tauri && cargo tauri dev
+	cd tauri && $(TAURI) dev
 
 # Package the Tauri app for the host OS (.app/.dmg on macOS). Needs icons.
 tauri-build: tauri-bin tauri-icon
-	cd tauri && cargo tauri build
+	cd tauri && $(TAURI) build
 
 help:
 	@echo "Targets:"

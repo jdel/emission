@@ -109,6 +109,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -135,7 +137,7 @@ jobs:
         run: choco install make -y
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: npm install -g @tauri-apps/cli@^2
 
       - name: Set app version from tag
         shell: bash
@@ -151,7 +153,7 @@ jobs:
 
       - name: Build desktop app
         shell: bash
-        run: cd tauri && cargo tauri build --bundles ${{ matrix.bundles }}
+        run: cd tauri && tauri build --bundles ${{ matrix.bundles }}
 
       - name: Upload installer to release
         shell: bash
