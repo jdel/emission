@@ -11,6 +11,9 @@ cask "emission-desktop" do
   depends_on arch: :arm64
   app "Emission.app"
 
+  # `brew uninstall --zap emission-desktop` removes the app's data dir too.
+  zap trash: "~/Library/Application Support/emission-desktop"
+
   # App is unsigned; strip quarantine so Gatekeeper allows first run.
   postflight do
     system_command "/usr/bin/xattr",

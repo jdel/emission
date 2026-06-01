@@ -90,6 +90,11 @@ homebrew_casks:
     homepage: "https://github.com/jdel/emission"
     description: "Spoof BitTorrent tracker announces to boost your ratio"
     skip_upload: auto
+    # `brew uninstall --zap emission` removes the XDG data/config dirs too.
+    zap:
+      trash:
+        - "~/Library/Application Support/emission"
+        - "~/Library/Preferences/emission"
     commit_author:
       name: emission[bot]
       email: noreply@jdel.org
