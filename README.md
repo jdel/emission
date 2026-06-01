@@ -221,7 +221,7 @@ emission serve \
 
 | Flag | Env var | Description |
 |------|---------|-------------|
-| `--storage.torrents`  | `EMISSION_STORAGE_TORRENTS`  | Directory to watch (default: `~/.local/share/emission/torrents`) |
+| `--storage.torrents`  | `EMISSION_STORAGE_TORRENTS`  | Directory to watch (default: `~/.local/share/emission/`) |
 | `--client.name`       | `EMISSION_CLIENT_NAME`       | Client profile to impersonate (default: `transmission-4.0.6`) |
 | `--client.bandwidth`  | `EMISSION_CLIENT_BANDWIDTH`  | Per-user upload bandwidth ceiling, shared proportionally across that user's torrents and used as each new torrent's default max (default: `1M`) |
 | `--client.max-peers`  | `EMISSION_CLIENT_MAX_PEERS`  | Peers to request per tracker (`0` = client default) |

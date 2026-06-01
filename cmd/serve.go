@@ -287,11 +287,11 @@ func isTorrentFile(name string) bool {
 }
 
 // resolveTorrentsDir returns the effective torrents directory: explicit flag
-// value when set, otherwise the XDG data path. Creates the directory if needed.
+// value when set, otherwise the XDG data dir itself. Creates it if needed.
 func resolveTorrentsDir() (string, error) {
 	dir := viper.GetString("storage.torrents")
 	if dir == "" {
-		p, err := appScope.DataPath("torrents")
+		p, err := appScope.DataPath("")
 		if err != nil {
 			return "", fmt.Errorf("resolve default torrents dir: %w", err)
 		}
