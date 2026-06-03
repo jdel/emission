@@ -77,6 +77,38 @@ func TestManagerAddFileHappy(t *testing.T) {
 	}
 }
 
+func TestManagerAddFilePrivateFlag(t *testing.T) {
+	srv := newTrackerServer(t)
+	dir := t.TempDir()
+	m := newTestManager(t, dir)
+
+	// Public torrent (no private key) → Status.Private false.
+	pub, err := m.AddFile(newTestTorrent(t, dir, "pub", srv.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pub.Private {
+		t.Error("public torrent reported Private=true")
+	}
+
+	// Private torrent: info dict carries private=1 → Status.Private true.
+	const pieces = "01234567890123456789"
+	name, announce := "priv", srv.URL
+	body := fmt.Sprintf("d8:announce%d:%s4:infod6:lengthi1024e4:name%d:%s12:piece lengthi16384e6:pieces20:%s7:privatei1eee",
+		len(announce), announce, len(name), name, pieces)
+	path := filepath.Join(dir, "priv.torrent")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	priv, err := m.AddFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !priv.Private {
+		t.Error("private torrent reported Private=false")
+	}
+}
+
 func TestManagerAddFileDuplicate(t *testing.T) {
 	srv := newTrackerServer(t)
 	dir := t.TempDir()

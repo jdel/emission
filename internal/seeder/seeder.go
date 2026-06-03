@@ -46,6 +46,7 @@ type Status struct {
 	ID                 string          `json:"id"`       // info hash, hex
 	Name               string          `json:"name"`     // torrent display name
 	Location           string          `json:"location"` // .torrent path, relative to the watched root
+	Private            bool            `json:"private"`  // torrent flagged private=1 (trackers only, no DHT/PEX)
 	SizeBytes          uint64          `json:"sizeBytes"`
 	UploadedBytes      uint64          `json:"uploadedBytes"`
 	RateBytesPerSec    uint64          `json:"rateBytesPerSec"`

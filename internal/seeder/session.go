@@ -366,6 +366,7 @@ func (s *session) status() Status {
 		ID:                 s.id,
 		Name:               s.meta.Name,
 		Location:           s.mgr.relPath(s.path),
+		Private:            s.meta.Private,
 		SizeBytes:          s.meta.Length,
 		UploadedBytes:      uploaded,
 		RateBytesPerSec:    rate,

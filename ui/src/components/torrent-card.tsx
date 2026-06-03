@@ -4,7 +4,9 @@ import {
   ChevronDown,
   FolderClosed,
   Gauge,
+  Globe,
   HardDrive,
+  Lock,
   Scale,
   SlidersHorizontal,
   Trash2,
@@ -389,6 +391,7 @@ export function TorrentCard({ torrent, onRemove, removing, compact, statsPoints 
                   <span className="text-muted-foreground hidden text-xs tabular-nums sm:inline">
                     next {formatETA(t.nextAnnounceAt)}
                   </span>
+                  <PrivacyBadge isPrivate={torrent.private} />
                   <TrackerBadge status={t.status} />
                 </div>
               </div>
@@ -605,6 +608,23 @@ function TrackerBadge({ status }: { status: Torrent['trackers'][number]['status'
   return (
     <Badge variant="secondary" className="text-emerald-500">
       ok
+    </Badge>
+  )
+}
+
+function PrivacyBadge({ isPrivate }: { isPrivate: boolean }) {
+  if (isPrivate) {
+    return (
+      <Badge variant="outline" className="gap-1 text-amber-500">
+        <Lock className="size-3" />
+        private
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="text-muted-foreground gap-1">
+      <Globe className="size-3" />
+      public
     </Badge>
   )
 }

@@ -22,6 +22,7 @@ export interface Torrent {
   id: string // info hash, hex
   name: string
   location: string // .torrent path relative to the watched directory
+  private: boolean // torrent flagged private (trackers only, no DHT/PEX)
   sizeBytes: number
   uploadedBytes: number
   rateBytesPerSec: number
