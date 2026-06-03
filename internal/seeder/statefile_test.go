@@ -2,6 +2,7 @@ package seeder
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -46,6 +47,51 @@ func TestStateFileZeroRatioRoundtrip(t *testing.T) {
 	}
 	if ratio != 0 {
 		t.Errorf("ratio = %v, want 0", ratio)
+	}
+}
+
+// TestStateFileConcurrentSave hammers one path from many goroutines, as the
+// per-tracker announce loops do for a multi-tracker torrent. With a shared temp
+// name, one goroutine's rename removes the temp out from under another (rename
+// ENOENT), and concurrent O_TRUNC writes interleave into a torn file. The
+// unique-temp-name atomic write must leave every save error-free and the final
+// file a complete, parseable state — never a torn one.
+func TestStateFileConcurrentSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.torrent")
+	const goroutines = 32
+	const iterations = 50
+
+	// Distinct, different-length JSON per writer so a torn interleave is
+	// detectable: a surviving file must match exactly one writer's value.
+	maxFor := func(g int) uint64 { return uint64(1_000+g) * 1_000_000 }
+
+	var wg sync.WaitGroup
+	errs := make(chan error, goroutines*iterations)
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				if err := SaveStateFile(path, maxFor(g), float64(g), int64(g), uint64(g), g%2 == 0); err != nil {
+					errs <- err
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent SaveStateFile: %v", err)
+	}
+
+	// File must be a complete state written by some single writer, not torn.
+	max, ratio, addedAt, uploaded, _, ok := LoadStateFile(path)
+	if !ok {
+		t.Fatal("LoadStateFile returned ok=false after concurrent writes (torn file)")
+	}
+	g := int(ratio)
+	if max != maxFor(g) || addedAt != int64(g) || uploaded != uint64(g) {
+		t.Errorf("torn write: got max=%d ratio=%v addedAt=%d uploaded=%d, fields don't agree on one writer", max, ratio, addedAt, uploaded)
 	}
 }
 

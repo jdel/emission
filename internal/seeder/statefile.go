@@ -3,6 +3,7 @@ package seeder
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 // torrentState is the on-disk shape of a per-torrent override, stored next
@@ -53,9 +54,28 @@ func SaveStateFile(torrentPath string, maxSpeed uint64, maxRatio float64, addedA
 	if err != nil {
 		return err
 	}
-	path := stateFilePath(torrentPath)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	return atomicWrite(stateFilePath(torrentPath), data, 0o644)
+}
+
+// atomicWrite writes data to path atomically: a uniquely-named temp file in the
+// same directory, then rename into place. The unique name lets concurrent
+// writers to the same path proceed without clobbering each other's temp file.
+func atomicWrite(path string, data []byte, perm os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // no-op after a successful rename
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Chmod(perm); err != nil { // CreateTemp makes 0600
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

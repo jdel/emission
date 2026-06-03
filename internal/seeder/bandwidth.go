@@ -193,9 +193,5 @@ func (s *settingsStore) save(snapshot map[string]userSettings) error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return atomicWrite(s.path, data, 0o644)
 }
