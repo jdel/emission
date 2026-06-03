@@ -171,15 +171,13 @@ func (m *Manager) clientFor(owner string) (*client.Client, error) {
 	return cl, nil
 }
 
-// cappedRate returns natural unless the sum of owner's natural rates across all
-// their torrents exceeds the owner's bandwidth, in which case it scales natural
-// down proportionally so the per-user total stays within the ceiling. Each
-// torrent's natural rate is recomputed deterministically (the ±20% jitter lives
-// in accumulateLoop), so the sum is consistent with every caller's own value.
-func (m *Manager) cappedRate(owner string, natural uint64) uint64 {
+// ownerNaturalRates sums every owner session's deterministic natural rate (the
+// ±20% jitter lives in accumulateLoop, so this is stable). When self is non-nil,
+// mine is that session's term from the same pass (0 otherwise), so a caller
+// capping one torrent never recomputes its own rate separately.
+func (m *Manager) ownerNaturalRates(owner string, self *session) (total, mine uint64) {
 	budget := m.settings.bandwidth(owner)
 	halfSaturation := m.settings.profileHalfSaturation(owner)
-	var total uint64
 	m.mu.Lock()
 	for _, s := range m.sessions {
 		if s.owner != owner {
@@ -189,14 +187,31 @@ func (m *Manager) cappedRate(owner string, natural uint64) uint64 {
 		for _, ts := range s.trackers {
 			l += ts.leechers.Load()
 		}
-		total += naturalRate(s.maxSpeed.Load(), budget, l, halfSaturation)
+		nr := naturalRate(s.maxSpeed.Load(), budget, l, halfSaturation)
+		total += nr
+		if s == self {
+			mine = nr
+		}
 	}
 	m.mu.Unlock()
+	return total, mine
+}
+
+// scaleToBudget returns rate unless the owner total exceeds budget, in which
+// case it scales rate down proportionally. float avoids uint64 overflow.
+func scaleToBudget(rate, total, budget uint64) uint64 {
 	if total == 0 || total <= budget {
-		return natural
+		return rate
 	}
-	// float avoids uint64 overflow on the intermediate product.
-	return uint64(float64(natural) * float64(budget) / float64(total))
+	return uint64(float64(rate) * float64(budget) / float64(total))
+}
+
+// cappedRateFor computes self's capped rate in a single pass — its own natural
+// term and the owner total come from the same loop, so naturalRate runs once per
+// session per tick (no separate self recompute) and the two stay consistent.
+func (m *Manager) cappedRateFor(self *session) uint64 {
+	total, mine := m.ownerNaturalRates(self.owner, self)
+	return scaleToBudget(mine, total, m.settings.bandwidth(self.owner))
 }
 
 // Bandwidth returns the upload-bandwidth ceiling (bytes/sec) for owner.
@@ -578,7 +593,7 @@ func (m *Manager) SetClientOptions(id string, maxSpeed uint64, maxRatio float64,
 		leechers += ts.leechers.Load()
 	}
 	// Re-roll into the new ceiling immediately; the owner's proportional cap is
-	// applied by pickRateLoop on its next tick (cappedRate locks m.mu, which we
+	// applied by pickRateLoop on its next tick (cappedRateFor locks m.mu, which we
 	// hold here). naturalRate already clamps to the owner's bandwidth.
 	s.rate.Store(naturalRate(maxSpeed, m.settings.bandwidth(s.owner), leechers, m.settings.profileHalfSaturation(s.owner)))
 	s.deleteOnCap.Store(deleteOnCap)

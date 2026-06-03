@@ -126,14 +126,12 @@ func TestCappedRateScalesToBudget(t *testing.T) {
 	t.Cleanup(m.Shutdown)
 
 	// Two of alice's torrents, each with leechers → natural rates that together
-	// exceed the budget, so cappedRate must scale them down to fit.
+	// exceed the budget, so cappedRateFor must scale them down to fit.
 	addFakeSession(m, "a", "alice", 10000, 10)
 	addFakeSession(m, "b", "alice", 10000, 10)
 
-	k := halfSaturationForProfile(profileNormal)
-	natural := naturalRate(10000, 1000, 10, k)
-	r1 := m.cappedRate("alice", natural)
-	r2 := m.cappedRate("alice", natural)
+	r1 := m.cappedRateFor(m.sessions["a"])
+	r2 := m.cappedRateFor(m.sessions["b"])
 	if r1+r2 > 1000 {
 		t.Errorf("sum %d exceeds budget 1000", r1+r2)
 	}
@@ -152,9 +150,7 @@ func TestCappedRateSingleTorrentClampedToBandwidth(t *testing.T) {
 
 	addFakeSession(m, "a", "alice", 10<<20, 4) // max 10M, 4 leechers
 
-	k := halfSaturationForProfile(profileNormal)
-	natural := naturalRate(10<<20, 1<<20, 4, k)
-	rate := m.cappedRate("alice", natural)
+	rate := m.cappedRateFor(m.sessions["a"])
 
 	// w(4) = 4/(4+3.33) ≈ 0.546 of the 1M ceiling ≈ 572k — well under budget.
 	if rate >= 1<<20 {
@@ -172,7 +168,7 @@ func TestCappedRateUnderBudgetUnchanged(t *testing.T) {
 
 	addFakeSession(m, "a", "alice", 10000, 10)
 	natural := naturalRate(10000, 1<<30, 10, halfSaturationForProfile(profileNormal))
-	if got := m.cappedRate("alice", natural); got != natural {
+	if got := m.cappedRateFor(m.sessions["a"]); got != natural {
 		t.Errorf("under-budget rate = %d, want unchanged %d", got, natural)
 	}
 }

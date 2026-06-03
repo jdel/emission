@@ -137,7 +137,7 @@ func (s *session) run() {
 // pickRateLoop refreshes the simulated upload rate every rateRefresh and records
 // a stats data point on each tick. The rate scales with this torrent's leecher
 // count up to its max, then the owner's bandwidth ceiling caps the sum across
-// all their torrents (see Manager.cappedRate).
+// all their torrents (see Manager.cappedRateFor).
 func (s *session) pickRateLoop() {
 	t := time.NewTicker(rateRefresh)
 	defer t.Stop()
@@ -151,10 +151,7 @@ func (s *session) pickRateLoop() {
 				leechers += ts.leechers.Load()
 			}
 			if leechers > 0 {
-				bw := s.mgr.settings.bandwidth(s.owner)
-				halfSaturation := s.mgr.settings.profileHalfSaturation(s.owner)
-				natural := naturalRate(s.maxSpeed.Load(), bw, leechers, halfSaturation)
-				s.rate.Store(s.mgr.cappedRate(s.owner, natural))
+				s.rate.Store(s.mgr.cappedRateFor(s))
 			} else {
 				s.rate.Store(0)
 			}
@@ -234,7 +231,7 @@ func (s *session) accumulateLoop() {
 				continue
 			}
 			up := s.uploaded.Load()
-			if cap := s.uploadCap.Load(); cap > 0 && up >= cap {
+			if capBytes := s.uploadCap.Load(); capBytes > 0 && up >= capBytes {
 				if s.deleteOnCap.Load() {
 					s.removeOnce.Do(func() { go func() { _ = s.mgr.Remove(s.id) }() })
 				}
@@ -447,7 +444,7 @@ func pickRateWeighted(min, max uint64, leechers int64, halfSaturation float64) u
 // naturalRate is the un-capped target rate for one torrent: leecher-weighted up
 // to the lesser of its own maxSpeed and the owner's total bandwidth — a single
 // torrent can never target more than the user's whole pipe. The per-user
-// proportional cap (Manager.cappedRate) still applies across multiple torrents.
+// proportional cap (Manager.cappedRateFor) still applies across multiple torrents.
 func naturalRate(maxSpeed, bandwidth uint64, leechers int64, halfSaturation float64) uint64 {
 	if bandwidth < maxSpeed {
 		maxSpeed = bandwidth
