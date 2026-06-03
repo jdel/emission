@@ -366,6 +366,11 @@ func rejectLocalHost(proxyURL string) error {
 // confirm it relays traffic; any HTTP response means the proxy works.
 const proxyProbeURL = "https://example.com"
 
+// proxyProbeTimeout bounds a single proxy reachability probe. Kept short so the
+// probe (run inline by the proxy-set handler) cannot pin a goroutine for long;
+// a legitimate proxy answers well within this.
+const proxyProbeTimeout = 5 * time.Second
+
 // ProbeUserProxy tests owner's effective proxy with a short request and records
 // the result for [ProxyStatus]. A direct (empty) proxy is always reachable.
 // Returns ok and an error message (empty when ok).
@@ -418,7 +423,7 @@ func probeProxy(ctx context.Context, proxyURL string, guarded bool) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, proxyProbeTimeout)
 	defer cancel()
 	tr := &http.Transport{Proxy: http.ProxyURL(u), DisableKeepAlives: true} // one-shot; don't pool the conn
 	if guarded {

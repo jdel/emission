@@ -110,9 +110,10 @@ func newMux(srv *server, withUI bool, rl *rpsLimiter) *http.ServeMux {
 	mux.HandleFunc("GET /api/bandwidth", srv.getBandwidth)
 	mux.HandleFunc("PUT /api/bandwidth", srv.setMyBandwidth)
 
-	// The caller's own tracker proxy (works with auth off too).
+	// The caller's own tracker proxy (works with auth off too). PUT runs an
+	// inline reachability probe, so rate-limit it to bound outbound work.
 	mux.HandleFunc("GET /api/proxy", srv.getProxy)
-	mux.HandleFunc("PUT /api/proxy", srv.setProxy)
+	mux.Handle("PUT /api/proxy", rl.wrap(http.HandlerFunc(srv.setProxy)))
 
 	// Auth: status is always reachable so the UI knows whether to show login.
 	// The rest of the auth routes only exist when authentication is enabled.
@@ -134,7 +135,7 @@ func newMux(srv *server, withUI bool, rl *rpsLimiter) *http.ServeMux {
 		mux.HandleFunc("DELETE /api/auth/users/{username}", srv.authRemoveUser)
 		mux.HandleFunc("PUT /api/auth/users/{username}/bandwidth", srv.setUserBandwidth)
 		mux.HandleFunc("GET /api/auth/users/{username}/proxy", srv.getUserProxyAdmin)
-		mux.HandleFunc("PUT /api/auth/users/{username}/proxy", srv.setUserProxyAdmin)
+		mux.Handle("PUT /api/auth/users/{username}/proxy", rl.wrap(http.HandlerFunc(srv.setUserProxyAdmin)))
 		// Pending invite management (admin only).
 		mux.HandleFunc("GET /api/auth/invites", srv.authListInvites)
 		mux.HandleFunc("DELETE /api/auth/invites/{token}", srv.authRevokeInvite)
