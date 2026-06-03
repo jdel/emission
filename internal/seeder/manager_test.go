@@ -109,6 +109,36 @@ func TestManagerAddFilePrivateFlag(t *testing.T) {
 	}
 }
 
+func TestManagerSnapshotCaches(t *testing.T) {
+	srv := newTrackerServer(t)
+	dir := t.TempDir()
+	m := newTestManager(t, dir)
+	if _, err := m.AddFile(newTestTorrent(t, dir, "x", srv.URL)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Prime the cache.
+	if got := len(m.snapshot()); got != 1 {
+		t.Fatalf("initial snapshot len = %d, want 1", got)
+	}
+
+	// Add a second torrent. Within the TTL the cached snapshot is still served,
+	// so it must not yet reflect the new torrent (this staleness is the cache
+	// doing its job — one build+sort shared across the window).
+	if _, err := m.AddFile(newTestTorrent(t, dir, "y", srv.URL)); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(m.snapshot()); got != 1 {
+		t.Errorf("snapshot len = %d within TTL; want stale cached value 1", got)
+	}
+
+	// After the TTL, the next call rebuilds and reflects both torrents.
+	time.Sleep(snapshotTTL + 50*time.Millisecond)
+	if got := len(m.snapshot()); got != 2 {
+		t.Errorf("snapshot len = %d after TTL; want refreshed value 2", got)
+	}
+}
+
 func TestManagerAddFileDuplicate(t *testing.T) {
 	srv := newTrackerServer(t)
 	dir := t.TempDir()

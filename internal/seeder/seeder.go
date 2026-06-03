@@ -110,6 +110,12 @@ type Manager struct {
 
 	statSubsMu sync.Mutex
 	statSubs   map[chan StatUpdate]struct{}
+
+	// snapshot caches the built List() for snapshotTTL so concurrent WebSocket
+	// ticks reuse one build+sort instead of each rebuilding it per connection.
+	snapMu    sync.Mutex
+	snapCache []Status
+	snapAt    time.Time
 }
 
 // New creates a Manager. tmpl is the template BitTorrent identity that each
@@ -676,7 +682,19 @@ func Owner(location string) string {
 // (root-level) torrents which are shared with everyone. An empty viewer
 // (authentication disabled) sees every torrent.
 func (m *Manager) Visible(viewer string) []Status {
-	all := m.List()
+	return visibleFrom(m.List(), viewer)
+}
+
+// VisibleSnapshot is Visible backed by a snapshotTTL cache of the full list —
+// used by the per-second WebSocket tick so many clients share one List()+sort
+// instead of each rebuilding it every tick.
+func (m *Manager) VisibleSnapshot(viewer string) []Status {
+	return visibleFrom(m.snapshot(), viewer)
+}
+
+// visibleFrom filters a prebuilt status list to the torrents viewer may see:
+// their own plus unowned (root-level) ones. An empty viewer sees everything.
+func visibleFrom(all []Status, viewer string) []Status {
 	if viewer == "" {
 		return all
 	}
@@ -687,6 +705,25 @@ func (m *Manager) Visible(viewer string) []Status {
 		}
 	}
 	return out
+}
+
+// snapshotTTL bounds how stale a cached List() may be. WebSocket clients tick
+// ~1s, so caching for this window builds and sorts the session list once per
+// second regardless of how many clients are connected.
+const snapshotTTL = time.Second
+
+// snapshot returns a recent List(), rebuilding at most once per snapshotTTL.
+// The result is read-only and shared between callers (each filters its own copy
+// via visibleFrom), so it must not be mutated.
+func (m *Manager) snapshot() []Status {
+	m.snapMu.Lock()
+	defer m.snapMu.Unlock()
+	if m.snapCache != nil && time.Since(m.snapAt) < snapshotTTL {
+		return m.snapCache
+	}
+	m.snapCache = m.List()
+	m.snapAt = time.Now()
+	return m.snapCache
 }
 
 // GetStats returns a copy of the in-memory stats buffer for the torrent with

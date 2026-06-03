@@ -71,7 +71,7 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if wsjson.Write(ctx, c, wsMessage{Type: "stats", Torrents: s.mgr.Visible(viewer)}) != nil {
+			if wsjson.Write(ctx, c, wsMessage{Type: "stats", Torrents: s.mgr.VisibleSnapshot(viewer)}) != nil {
 				return
 			}
 		case _, ok := <-changed:
