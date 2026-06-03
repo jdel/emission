@@ -1,10 +1,38 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
+
+func (rl *rateLimiter) size() int {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	return len(rl.buckets)
+}
+
+func TestRateLimiterEvictsIdleKeys(t *testing.T) {
+	rl := newRateLimiter(1, 10)
+	rl.idleTTL = 10 * time.Millisecond
+	rl.sweepEvery = 0 // sweep on every call
+
+	for i := 0; i < 100; i++ {
+		rl.allow(fmt.Sprintf("ip-%d", i))
+	}
+	if got := rl.size(); got != 100 {
+		t.Fatalf("after 100 distinct keys: size=%d, want 100", got)
+	}
+
+	time.Sleep(15 * time.Millisecond) // let the 100 keys go idle past idleTTL
+	rl.allow("trigger")               // this call's sweep should drop them
+
+	if got := rl.size(); got != 1 {
+		t.Errorf("idle keys not evicted: size=%d, want 1 (only %q)", got, "trigger")
+	}
+}
 
 func TestRateLimiterAllowsBurst(t *testing.T) {
 	rl := newRateLimiter(1, 5)

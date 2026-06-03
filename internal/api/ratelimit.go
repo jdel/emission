@@ -17,14 +17,39 @@ type rateLimiter struct {
 	last    map[string]time.Time
 	rate    float64
 	burst   float64
+
+	// idleTTL drops keys untouched for this long; sweepEvery caps how often the
+	// O(n) sweep runs. A bucket idle past idleTTL has refilled to full burst, so
+	// dropping it is equivalent to treating the key as first-seen — keeps the map
+	// from growing without bound on a public endpoint while changing no behavior.
+	idleTTL    time.Duration
+	sweepEvery time.Duration
+	lastSweep  time.Time
 }
 
 func newRateLimiter(rate, burst float64) *rateLimiter {
 	return &rateLimiter{
-		buckets: map[string]float64{},
-		last:    map[string]time.Time{},
-		rate:    rate,
-		burst:   burst,
+		buckets:    map[string]float64{},
+		last:       map[string]time.Time{},
+		rate:       rate,
+		burst:      burst,
+		idleTTL:    10 * time.Minute,
+		sweepEvery: time.Minute,
+	}
+}
+
+// sweepLocked drops keys idle past idleTTL, at most once per sweepEvery. Caller
+// holds rl.mu.
+func (rl *rateLimiter) sweepLocked(now time.Time) {
+	if now.Sub(rl.lastSweep) < rl.sweepEvery {
+		return
+	}
+	rl.lastSweep = now
+	for k, t := range rl.last {
+		if now.Sub(t) > rl.idleTTL {
+			delete(rl.last, k)
+			delete(rl.buckets, k)
+		}
 	}
 }
 
@@ -32,6 +57,7 @@ func (rl *rateLimiter) allow(key string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now()
+	rl.sweepLocked(now)
 	if t, ok := rl.last[key]; ok {
 		rl.buckets[key] += now.Sub(t).Seconds() * rl.rate // refill tokens earned since last call
 		if rl.buckets[key] > rl.burst {
