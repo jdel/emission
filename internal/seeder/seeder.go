@@ -595,7 +595,7 @@ func (m *Manager) SetClientOptions(id string, maxSpeed uint64, maxRatio float64,
 	// Re-roll into the new ceiling immediately; the owner's proportional cap is
 	// applied by pickRateLoop on its next tick (cappedRateFor locks m.mu, which we
 	// hold here). naturalRate already clamps to the owner's bandwidth.
-	s.rate.Store(naturalRate(maxSpeed, m.settings.bandwidth(s.owner), leechers, m.settings.profileHalfSaturation(s.owner)))
+	s.targetRate.Store(naturalRate(maxSpeed, m.settings.bandwidth(s.owner), leechers, m.settings.profileHalfSaturation(s.owner)))
 	s.deleteOnCap.Store(deleteOnCap)
 	path := s.path
 	addedAtMs := s.addedAt.UnixMilli()

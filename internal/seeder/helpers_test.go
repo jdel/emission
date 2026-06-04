@@ -48,6 +48,42 @@ func TestPickRateWeighted(t *testing.T) {
 	_ = pickRateWeighted(100, 200, -5, k)
 }
 
+func TestJitterRate(t *testing.T) {
+	if got := jitterRate(0); got != 0 {
+		t.Errorf("jitterRate(0) = %d, want 0", got)
+	}
+
+	// A positive rate stays within ±(rate/5+1), never below 1, and actually varies.
+	const rate uint64 = 1000
+	span := rate/5 + 1 // 201
+	var lo, hi uint64 = ^uint64(0), 0
+	for i := 0; i < 5000; i++ {
+		n := jitterRate(rate)
+		if n < 1 {
+			t.Fatalf("jitterRate(%d) = %d, want >= 1", rate, n)
+		}
+		if n < rate-span || n > rate+span {
+			t.Fatalf("jitterRate(%d) = %d, outside [%d, %d]", rate, n, rate-span, rate+span)
+		}
+		if n < lo {
+			lo = n
+		}
+		if n > hi {
+			hi = n
+		}
+	}
+	if lo == hi {
+		t.Error("jitterRate produced no variation over 5000 draws")
+	}
+
+	// Tiny rates never clamp below 1.
+	for i := 0; i < 1000; i++ {
+		if n := jitterRate(1); n < 1 {
+			t.Fatalf("jitterRate(1) = %d, want >= 1", n)
+		}
+	}
+}
+
 func TestBackoff(t *testing.T) {
 	cases := []struct {
 		in, want time.Duration

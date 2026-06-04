@@ -55,7 +55,8 @@ type session struct {
 	// --- Atomic: read by goroutines, written by SetClientOptions ---
 	maxSpeed    atomic.Uint64
 	uploaded    atomic.Uint64 // bytes uploaded this session
-	rate        atomic.Uint64 // current simulated rate, bytes/sec
+	targetRate  atomic.Uint64 // simulated target rate, bytes/sec; the jitter center
+	instRate    atomic.Uint64 // last per-second jittered rate, for display + stats
 	uploadCap   atomic.Uint64 // max bytes to upload (0 = unlimited)
 	deleteOnCap atomic.Bool   // remove the torrent automatically when capped
 	removeOnce  sync.Once     // ensures auto-remove fires exactly once
@@ -100,7 +101,7 @@ func newSession(parent context.Context, id string, meta *torrent.Meta, path stri
 	}
 	// No leechers are known until the first announce, so start at zero; the
 	// rate loop sets a real value on its first tick.
-	s.rate.Store(0)
+	s.targetRate.Store(0)
 	return s
 }
 
@@ -151,9 +152,9 @@ func (s *session) pickRateLoop() {
 				leechers += ts.leechers.Load()
 			}
 			if leechers > 0 {
-				s.rate.Store(s.mgr.cappedRateFor(s))
+				s.targetRate.Store(s.mgr.cappedRateFor(s))
 			} else {
-				s.rate.Store(0)
+				s.targetRate.Store(0)
 			}
 			s.appendStat(leechers)
 		}
@@ -164,7 +165,7 @@ func (s *session) pickRateLoop() {
 func (s *session) appendStat(leechers int64) {
 	pt := StatsPoint{
 		TimeMs:   time.Now().UnixMilli(),
-		Rate:     s.rate.Load(),
+		Rate:     s.instRate.Load(),
 		Leechers: leechers,
 	}
 	s.statsMu.Lock()
@@ -228,33 +229,26 @@ func (s *session) accumulateLoop() {
 				leechers += ts.leechers.Load()
 			}
 			if leechers == 0 {
+				s.instRate.Store(0)
 				continue
 			}
 			up := s.uploaded.Load()
 			if capBytes := s.uploadCap.Load(); capBytes > 0 && up >= capBytes {
+				s.instRate.Store(0)
 				if s.deleteOnCap.Load() {
 					s.removeOnce.Do(func() { go func() { _ = s.mgr.Remove(s.id) }() })
 				}
 				continue
 			}
-			rate := s.rate.Load()
-			if rate == 0 {
+			// Perturb the target by ±~20% each second so the reported rate (and
+			// the bytes accumulated) vary like a real upload instead of a flat
+			// line. instRate feeds status() and the stats graph.
+			n := jitterRate(s.targetRate.Load())
+			s.instRate.Store(n)
+			if n == 0 {
 				continue
 			}
-			// Cap at MaxInt64 to keep the signed arithmetic below safe. Real
-			// rates are orders of magnitude smaller than this; the cap is a
-			// belt-and-braces guard, not an expected branch.
-			if rate > math.MaxInt64 {
-				rate = math.MaxInt64
-			}
-			// One signed draw in [-span, +span], span = ~20% of rate.
-			span := int64(rate/5 + 1)
-			delta := rand.Int64N(2*span+1) - span
-			n := int64(rate) + delta
-			if n < 1 {
-				n = 1 // never accumulate zero/negative
-			}
-			s.uploaded.Add(uint64(n))
+			s.uploaded.Add(n)
 		}
 	}
 }
@@ -355,7 +349,7 @@ func (s *session) status() Status {
 	for _, ts := range s.trackers {
 		leechers += ts.leechers.Load()
 	}
-	rate := s.rate.Load()
+	rate := s.instRate.Load()
 	if capped || leechers == 0 {
 		rate = 0
 	}
@@ -425,6 +419,27 @@ func logAnnounce(name, url string, ev tracker.Event, resp *tracker.Response, err
 }
 
 // --- small helpers ----------------------------------------------------------
+
+// jitterRate perturbs rate by up to ±20% (a fresh per-second draw), never
+// returning below 1 for a positive rate. Models the second-to-second variation
+// of a real upload; a rate of 0 stays 0.
+func jitterRate(rate uint64) uint64 {
+	if rate == 0 {
+		return 0
+	}
+	// Cap at MaxInt64 to keep the signed arithmetic safe. Real rates are orders
+	// of magnitude smaller; this is a belt-and-braces guard, not an expected path.
+	if rate > math.MaxInt64 {
+		rate = math.MaxInt64
+	}
+	span := int64(rate/5 + 1) // ~20% of rate
+	delta := rand.Int64N(2*span+1) - span
+	n := int64(rate) + delta
+	if n < 1 {
+		n = 1
+	}
+	return uint64(n)
+}
 
 // pickRateWeighted selects a rate in [min, max] biased toward higher values
 // when leechers is large using a hyperbolic weight w = L/(L+halfSaturation),
