@@ -102,6 +102,69 @@ func TestBuildURLOmitsEmptyEvent(t *testing.T) {
 	}
 }
 
+// queryKeys returns the parameter keys of url's query, in order.
+func queryKeys(u string) []string {
+	q := u
+	if i := strings.IndexByte(u, '?'); i >= 0 {
+		q = u[i+1:]
+	}
+	var keys []string
+	for _, p := range strings.Split(q, "&") {
+		if p == "" {
+			continue
+		}
+		k, _, _ := strings.Cut(p, "=")
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// TestBuildURLPreservesParamOrder pins the per-client parameter order — it is a
+// fingerprint, so the query must follow the template's order exactly (e.g. never
+// alphabetized, as net/url.Values.Encode would). Empty placeholders are dropped
+// in place without disturbing the order of the rest; trackerid trails.
+func TestBuildURLPreservesParamOrder(t *testing.T) {
+	c, err := client.New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &torrent.Meta{InfoHashURLEncoded: "%aa%bb"}
+
+	// transmission-4.0.6 template order:
+	//   info_hash peer_id port uploaded downloaded left numwant key
+	//   compact supportcrypto event ipv6
+	// On a started announce, {ipv6} is unsupported → dropped; event stays.
+	got := queryKeys(BuildURL("http://t.example/a", m, c,
+		Params{Event: EventStarted, TrackerID: "tid"}))
+	want := []string{
+		"info_hash", "peer_id", "port", "uploaded", "downloaded", "left",
+		"numwant", "key", "compact", "supportcrypto", "event", "trackerid",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("keys = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("param order broken at %d: got %v, want %v", i, got, want)
+		}
+	}
+
+	// A regular announce drops both {event} and {ipv6}, order otherwise intact.
+	none := queryKeys(BuildURL("http://t.example/a", m, c, Params{Event: EventNone}))
+	wantNone := []string{
+		"info_hash", "peer_id", "port", "uploaded", "downloaded", "left",
+		"numwant", "key", "compact", "supportcrypto",
+	}
+	if len(none) != len(wantNone) {
+		t.Fatalf("regular keys = %v, want %v", none, wantNone)
+	}
+	for i := range wantNone {
+		if none[i] != wantNone[i] {
+			t.Fatalf("regular param order broken at %d: got %v, want %v", i, none, wantNone)
+		}
+	}
+}
+
 func TestBuildURLTrackerID(t *testing.T) {
 	c, err := client.New("transmission-4.0.6")
 	if err != nil {

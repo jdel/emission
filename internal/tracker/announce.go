@@ -137,52 +137,98 @@ func Announce(ctx context.Context, trackerURL string, m *torrent.Meta, c *client
 	return parseResponse(body)
 }
 
-// BuildURL renders the announce URL by substituting all placeholders in the
-// client's query template against trackerURL, m, c, and p.
+// BuildURL renders the announce URL from the client's query template: each
+// "key={placeholder}" gets its value substituted, and any param whose value
+// resolves empty (an unsupported or absent placeholder, e.g. {ipv6} or {event}
+// on a regular announce) is dropped rather than left as a dangling "key=".
+//
+// The query is assembled by hand rather than with net/url.Values, on purpose:
+// Values.Encode sorts params alphabetically and percent-encodes their values —
+// both wrong here. The per-client parameter order is itself a fingerprint we
+// must preserve, and info_hash/peer_id/key are already raw-byte %-encoded, so
+// re-encoding would double-escape them.
 func BuildURL(trackerURL string, m *torrent.Meta, c *client.Client, p Params) string {
+	vals := announceValues(m, c, p)
 	tmpl, _ := c.Query()
-	sep := "?"
-	if strings.Contains(trackerURL, "?") {
-		sep = "&"
-	}
-	out := trackerURL + sep + tmpl
-	out = strings.ReplaceAll(out, "{infohash}", m.InfoHashURLEncoded)
-	out = strings.ReplaceAll(out, "{peerid}", c.PeerID)
-	out = strings.ReplaceAll(out, "{key}", c.Key)
-	out = strings.ReplaceAll(out, "{port}", strconv.FormatUint(uint64(p.Port), 10))
-	out = strings.ReplaceAll(out, "{uploaded}", strconv.FormatUint(p.Uploaded, 10))
-	out = strings.ReplaceAll(out, "{downloaded}", strconv.FormatUint(p.Downloaded, 10))
-	out = strings.ReplaceAll(out, "{left}", strconv.FormatUint(p.Left, 10))
-	if p.Event == EventNone {
-		// Real clients omit event entirely on regular announces. Drop the
-		// whole token rather than leave a bare event=.
-		out = strings.ReplaceAll(out, "{event}", "")
-		out = strings.ReplaceAll(out, "&event=&", "&")
-		out = strings.ReplaceAll(out, "?event=&", "?")
-		out = strings.TrimSuffix(out, "&event=")
-		out = strings.TrimSuffix(out, "?event=")
-	} else {
-		out = strings.ReplaceAll(out, "{event}", string(p.Event))
-	}
-	numwant := p.NumWant
-	if numwant == 0 {
-		if p.Event == EventStopped {
-			numwant = c.NumWantOnStop
-		} else {
-			numwant = c.NumWant
+
+	var b strings.Builder
+	b.WriteString(trackerURL)
+	b.WriteByte(querySep(trackerURL))
+
+	first := true
+	for _, param := range strings.Split(tmpl, "&") {
+		key, valTmpl, ok := strings.Cut(param, "=")
+		if !ok {
+			continue // not a key=value fragment
 		}
+		val := valTmpl
+		if filled, isPlaceholder := vals[valTmpl]; isPlaceholder {
+			val = filled
+		}
+		if val == "" {
+			continue // unfilled placeholder → omit the whole param
+		}
+		writeParam(&b, &first, key, val)
 	}
-	out = strings.ReplaceAll(out, "{numwant}", strconv.Itoa(numwant))
-	// Strip placeholders we don't support so the URL is still valid.
-	for _, ph := range []string{"{ip}", "{ipv6}", "{os}", "{java}", "{locale}"} {
-		out = strings.ReplaceAll(out, ph, "")
-	}
-	// Common pattern in some templates: "ipv6={ipv6}" becomes "ipv6=" — leave
-	// it; trackers accept empty values.
 	if p.TrackerID != "" {
-		out += "&trackerid=" + url.QueryEscape(p.TrackerID)
+		writeParam(&b, &first, "trackerid", url.QueryEscape(p.TrackerID))
 	}
-	return out
+	return b.String()
+}
+
+// announceValues maps each template placeholder to its filled value. An empty
+// value means "drop this param": unsupported placeholders ({ip}, {ipv6}, {os},
+// {java}, {locale}) and {event} on a regular announce.
+func announceValues(m *torrent.Meta, c *client.Client, p Params) map[string]string {
+	return map[string]string{
+		"{infohash}":   m.InfoHashURLEncoded,
+		"{peerid}":     c.PeerID,
+		"{key}":        c.Key,
+		"{port}":       strconv.FormatUint(uint64(p.Port), 10),
+		"{uploaded}":   strconv.FormatUint(p.Uploaded, 10),
+		"{downloaded}": strconv.FormatUint(p.Downloaded, 10),
+		"{left}":       strconv.FormatUint(p.Left, 10),
+		"{numwant}":    strconv.Itoa(numWant(p, c)),
+		"{event}":      string(p.Event), // "" on a regular announce
+		"{ip}":         "",
+		"{ipv6}":       "",
+		"{os}":         "",
+		"{java}":       "",
+		"{locale}":     "",
+	}
+}
+
+// numWant resolves the peer count to request: an explicit Params.NumWant wins,
+// else the client's stop/normal default for the event.
+func numWant(p Params, c *client.Client) int {
+	if p.NumWant != 0 {
+		return p.NumWant
+	}
+	if p.Event == EventStopped {
+		return c.NumWantOnStop
+	}
+	return c.NumWant
+}
+
+// querySep is the character joining trackerURL and the query: '&' when the URL
+// already carries a query, '?' otherwise.
+func querySep(trackerURL string) byte {
+	if strings.Contains(trackerURL, "?") {
+		return '&'
+	}
+	return '?'
+}
+
+// writeParam appends key=val, prefixing '&' for every param after the first.
+func writeParam(b *strings.Builder, first *bool, key, val string) {
+	if *first {
+		*first = false
+	} else {
+		b.WriteByte('&')
+	}
+	b.WriteString(key)
+	b.WriteByte('=')
+	b.WriteString(val)
 }
 
 func parseResponse(body []byte) (*Response, error) {
