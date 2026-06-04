@@ -521,8 +521,12 @@ func (m *Manager) AddFile(path string) (Status, error) {
 		s.deleteOnCap.Store(true)
 	}
 	if pts, err := loadStatsFile(abs + ".stats"); err == nil {
+		s.diskLines = len(pts)
+		if len(pts) > statsMaxPoints { // keep only the most recent in memory
+			pts = pts[len(pts)-statsMaxPoints:]
+		}
 		s.statsBuf = pts
-		s.statsFlushed = len(pts) // already on disk
+		s.statsFlushed = len(pts) // everything in the buffer is already on disk
 	}
 	m.sessions[id] = s
 	m.byPath[abs] = s

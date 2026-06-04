@@ -29,9 +29,15 @@ const rateRefresh = 30 * time.Second
 // is a courtesy, so a slow or dead tracker must not delay exit.
 const stopAnnounceTimeout = 5 * time.Second
 
-// statsMaxPoints is the maximum number of data points retained in memory per
-// session. At one point per 30 s this covers ~83 hours.
-const statsMaxPoints = 20_000
+// statsMaxPoints caps the retained history in memory at ~1 day at one point per
+// rateRefresh; it's also the window the file is compacted back down to.
+const statsMaxPoints = int(24 * time.Hour / rateRefresh)
+
+// statsCompactAt is the on-disk line count that triggers a full atomic rewrite
+// back to the window (statsMaxPoints, ~1 day). Points are appended cheaply until
+// then, so compaction runs ~once a day rather than per flush; the file is
+// bounded to ~2 days.
+const statsCompactAt = int(2 * 24 * time.Hour / rateRefresh)
 
 // session is one torrent being seeded: a shared upload counter, a rate that
 // drifts over time, and one announce loop per tracker URL.
@@ -64,7 +70,8 @@ type session struct {
 	// --- Guarded by statsMu ---
 	statsMu      sync.Mutex
 	statsBuf     []StatsPoint
-	statsFlushed int // number of points already written to disk
+	statsFlushed int // count of statsBuf already appended to disk (delta cursor)
+	diskLines    int // lines currently in the .stats file
 }
 
 // trackerState holds one tracker's latest values. Written by that tracker's
@@ -170,12 +177,11 @@ func (s *session) appendStat(leechers int64) {
 	}
 	s.statsMu.Lock()
 	s.statsBuf = append(s.statsBuf, pt)
-	if len(s.statsBuf) > statsMaxPoints {
+	if len(s.statsBuf) > statsMaxPoints { // drop oldest beyond the cap
 		drop := len(s.statsBuf) - statsMaxPoints
 		s.statsBuf = s.statsBuf[drop:]
-		if s.statsFlushed >= drop {
-			s.statsFlushed -= drop
-		} else {
+		s.statsFlushed -= drop
+		if s.statsFlushed < 0 {
 			s.statsFlushed = 0
 		}
 	}
@@ -198,16 +204,30 @@ func (s *session) statsFlushLoop() {
 	}
 }
 
+// flushStats persists points added since the last flush. It appends the delta
+// (cheap), but once the file would exceed statsCompactAt lines it compacts —
+// one atomic rewrite down to the retained buffer — so the file stays bounded
+// without rewriting the whole thing on every flush.
 func (s *session) flushStats() {
 	s.statsMu.Lock()
-	newPts := s.statsBuf[s.statsFlushed:]
-	if len(newPts) == 0 {
+	if s.statsFlushed >= len(s.statsBuf) {
 		s.statsMu.Unlock()
+		return // nothing new
+	}
+	newCount := len(s.statsBuf) - s.statsFlushed
+	if s.diskLines+newCount > statsCompactAt {
+		snapshot := make([]StatsPoint, len(s.statsBuf))
+		copy(snapshot, s.statsBuf)
+		s.statsFlushed = len(s.statsBuf)
+		s.diskLines = len(snapshot)
+		s.statsMu.Unlock()
+		_ = writeStatsFile(s.path+".stats", snapshot)
 		return
 	}
-	toWrite := make([]StatsPoint, len(newPts))
-	copy(toWrite, newPts)
+	toWrite := make([]StatsPoint, newCount)
+	copy(toWrite, s.statsBuf[s.statsFlushed:])
 	s.statsFlushed = len(s.statsBuf)
+	s.diskLines += newCount
 	s.statsMu.Unlock()
 	_ = appendStatsFile(s.path+".stats", toWrite)
 }
