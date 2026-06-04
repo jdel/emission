@@ -432,9 +432,44 @@ export function TorrentCardSkeleton() {
   )
 }
 
-function TorrentChart({ points }: { points: StatsPoint[] }) {
-  const [hover, setHover] = useState<{ idx: number; svgX: number } | null>(null)
+// graphWindowMs caps the chart to the most recent day so long-lived torrents
+// stay readable. The full history is still kept and streamed — only the drawing
+// is windowed.
+const graphWindowMs = 24 * 60 * 60 * 1000
 
+// chartBudget is the most columns the chart draws. Raw points are bucketed to at
+// most this many, so a dense series stays readable instead of a fuzzy full-
+// density line. ~the chart's rendered width in px.
+const chartBudget = 240
+
+interface ChartPoint {
+  t: number
+  l: number // leechers (bucket's last value — a step series)
+  r: number // mean rate over the bucket
+}
+
+// downsample buckets points into at most `budget` columns, averaging the rate in
+// each so a dense series renders as a clean line instead of a fuzzy point-per-
+// tick one. Leechers take the bucket's last value (a step series).
+function downsample(points: StatsPoint[], budget: number): ChartPoint[] {
+  const stride = Math.max(1, Math.ceil(points.length / budget))
+  const out: ChartPoint[] = []
+  for (let i = 0; i < points.length; i += stride) {
+    let rSum = 0
+    let j = i
+    for (; j < points.length && j < i + stride; j++) rSum += points[j].r
+    const n = j - i
+    out.push({ t: points[i].t, l: points[j - 1].l, r: Math.round(rSum / n) })
+  }
+  return out
+}
+
+function TorrentChart({ points: allPoints }: { points: StatsPoint[] }) {
+  const [hover, setHover] = useState<{ idx: number; svgX: number } | null>(null)
+  const now = useNow()
+
+  const windowed = allPoints.filter((p) => p.t >= now - graphWindowMs)
+  const points = downsample(windowed, chartBudget)
   if (points.length < 2) {
     return (
       <div className="px-6 py-3 text-xs text-muted-foreground">
@@ -453,11 +488,11 @@ function TorrentChart({ points }: { points: StatsPoint[] }) {
   const tMax = points[points.length - 1].t
   const tRange = tMax - tMin || 1
   const lMax = Math.max(...points.map((p) => p.l), 1)
-  const rMax = Math.max(...points.map((p) => p.r), 1)
+  const rTop = Math.max(...points.map((p) => p.r), 1)
 
   const xOf = (t: number) => PL + ((t - tMin) / tRange) * iW
   const lYOf = (l: number) => PT + (1 - l / lMax) * iH
-  const rYOf = (r: number) => PT + (1 - r / rMax) * iH
+  const rYOf = (r: number) => PT + (1 - r / rTop) * iH
 
   const lPath = points
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(p.t).toFixed(1)},${lYOf(p.l).toFixed(1)}`)
@@ -537,7 +572,7 @@ function TorrentChart({ points }: { points: StatsPoint[] }) {
           {/* Rate line (primary, right Y) */}
           <g className="text-primary">
             <path d={rPath} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" opacity="0.75" />
-            <text x={PL + iW + 2} y={PT + 3.5} textAnchor="start" fontSize="5.5" fill="currentColor" opacity="0.8">{formatRate(rMax)}</text>
+            <text x={PL + iW + 2} y={PT + 3.5} textAnchor="start" fontSize="5.5" fill="currentColor" opacity="0.8">{formatRate(rTop)}</text>
             <text x={PL + iW + 2} y={PT + iH + 0.5} textAnchor="start" fontSize="5.5" fill="currentColor" opacity="0.8">0</text>
           </g>
 
