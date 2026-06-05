@@ -4,6 +4,26 @@ All notable changes to emission are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.3.2] - 2026-06-05
+
+### Added
+- Per-tracker **private/public badge** on torrent cards, reflecting the torrent's `private` flag (now exposed in the API).
+- The reported upload rate jitters ±20% per second, so the live rate and the stats graph fluctuate like a real client instead of showing a flat line.
+
+### Changed
+- Stats history is capped to ~1 day, in memory and on disk — the `.stats` file is compacted instead of growing without bound.
+- The torrent chart is windowed to the last day and downsampled to a fixed draw budget, keeping long-lived torrents readable.
+- Announce queries omit unfilled parameters (e.g. `ipv6=`) instead of sending them blank; per-client parameter order is preserved.
+- Internal: per-user rate caps recompute each torrent's natural rate once per tick, and the torrent-list snapshot is cached across WebSocket clients.
+
+### Fixed
+- State files are written atomically (unique temp + rename), preventing corruption when multiple trackers persist a torrent concurrently.
+- Idle rate-limiter buckets are evicted, bounding memory on a long-running server.
+- The proxy reachability probe is capped at 5s and the proxy endpoints are rate-limited, removing a way to tie up server goroutines.
+
+### Security
+- Updated the Go toolchain to 1.26.4, resolving two standard-library advisories (GO-2026-5037 `crypto/x509`, GO-2026-5039 `net/textproto`).
+
 ## [0.3.1] - 2026-06-01
 
 ### Added
