@@ -10,7 +10,7 @@ COPY ui/ ./
 RUN npm run build
 
 # --- Stage 2: build the Go binary --------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
