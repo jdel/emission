@@ -1488,6 +1488,10 @@ const docTemplate = `{
                     "description": "torrent display name",
                     "type": "string"
                 },
+                "private": {
+                    "description": "torrent flagged private=1 (trackers only, no DHT/PEX)",
+                    "type": "boolean"
+                },
                 "rateBytesPerSec": {
                     "type": "integer"
                 },
