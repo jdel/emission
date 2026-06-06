@@ -5,6 +5,34 @@ import (
 	"time"
 )
 
+func TestSessionStoreEvictsExpired(t *testing.T) {
+	s := NewSessionStore(20 * time.Millisecond)
+	if _, err := s.Create("alice"); err != nil { // abandoned: never looked up again
+		t.Fatal(err)
+	}
+	time.Sleep(40 * time.Millisecond) // let it expire
+	if _, err := s.Create("bob"); err != nil { // a later Create must sweep the expired one
+		t.Fatal(err)
+	}
+	if len(s.sessions) != 1 {
+		t.Fatalf("expired session not evicted: %d entries, want 1", len(s.sessions))
+	}
+}
+
+func TestInviteStoreEvictsExpired(t *testing.T) {
+	s := NewInviteStore(20 * time.Millisecond)
+	if _, err := s.Create("alice", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if _, err := s.Create("bob", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.tokens) != 1 {
+		t.Fatalf("expired invite not evicted: %d entries, want 1", len(s.tokens))
+	}
+}
+
 func TestSessionLifecycle(t *testing.T) {
 	s := NewSessionStore(time.Hour)
 	id, err := s.Create("alice")

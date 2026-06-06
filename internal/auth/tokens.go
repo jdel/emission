@@ -44,8 +44,14 @@ func (s *SessionStore) Create(username string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	now := time.Now()
 	s.mu.Lock()
-	s.sessions[id] = sessionEntry{username: username, expiry: time.Now().Add(s.ttl)}
+	for k, e := range s.sessions { // prune expired/abandoned entries before inserting
+		if now.After(e.expiry) {
+			delete(s.sessions, k)
+		}
+	}
+	s.sessions[id] = sessionEntry{username: username, expiry: now.Add(s.ttl)}
 	s.mu.Unlock()
 	return id, nil
 }
@@ -101,8 +107,14 @@ func NewInviteStore(ttl time.Duration) *InviteStore {
 // the username of whoever created the invite (stored for audit). The token is
 // a 3-word code (e.g. "arrogant-jimmy-dumpster") — easy to read aloud.
 func (s *InviteStore) Create(username, createdBy string) (string, error) {
+	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for k, e := range s.tokens { // prune expired tokens before inserting
+		if now.After(e.expiry) {
+			delete(s.tokens, k)
+		}
+	}
 	for attempt := 0; attempt < 8; attempt++ {
 		tok, err := randomWords(3)
 		if err != nil {
@@ -111,7 +123,7 @@ func (s *InviteStore) Create(username, createdBy string) (string, error) {
 		if _, taken := s.tokens[tok]; taken {
 			continue // astronomically unlikely; retry anyway
 		}
-		s.tokens[tok] = inviteEntry{username: username, createdBy: createdBy, expiry: time.Now().Add(s.ttl)}
+		s.tokens[tok] = inviteEntry{username: username, createdBy: createdBy, expiry: now.Add(s.ttl)}
 		return tok, nil
 	}
 	return "", fmt.Errorf("could not allocate a unique invite token")
