@@ -130,7 +130,11 @@ func Announce(ctx context.Context, trackerURL string, m *torrent.Meta, c *client
 		defer gz.Close()
 		src = gz
 	}
-	body, err := io.ReadAll(src)
+	// Bound the read: real announce replies are a few KB. This caps a malicious
+	// or MITM tracker from OOM-ing us — and because src may be the decompressed
+	// stream, it also defends against a gzip bomb.
+	const maxTrackerResponse = 1 << 20 // 1 MiB
+	body, err := io.ReadAll(io.LimitReader(src, maxTrackerResponse))
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
