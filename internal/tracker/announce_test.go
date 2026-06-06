@@ -239,6 +239,39 @@ func TestParseTrackerInvalidBencode(t *testing.T) {
 	}
 }
 
+// TestAnnounceCapsResponseBody guards continuous-improvement finding #2: a
+// malicious tracker returning an endless body must not be buffered whole. The
+// server streams until the client hangs up; with the read capped, Announce stops
+// at the limit and returns; without it, io.ReadAll never finishes and Announce
+// hangs (caught by the timeout).
+func TestAnnounceCapsResponseBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		buf := make([]byte, 32<<10)
+		for {
+			if _, err := w.Write(buf); err != nil { // client closed after the cap
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	c, err := client.New("transmission-4.0.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = Announce(context.Background(), srv.URL, newTestMeta(), c, Params{HTTPClient: srv.Client()})
+		close(done)
+	}()
+	select {
+	case <-done: // returned at the cap — good
+	case <-time.After(3 * time.Second):
+		t.Fatal("Announce did not return on an endless response — read is not capped")
+	}
+}
+
 func newTestMeta() *torrent.Meta {
 	return &torrent.Meta{InfoHashURLEncoded: "%aa%bb"}
 }
