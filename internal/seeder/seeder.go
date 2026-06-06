@@ -135,7 +135,12 @@ func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove b
 	}
 	return &Manager{
 		client:       tmpl,
-		httpClient:   &http.Client{Timeout: 30 * time.Second}, // direct (no proxy)
+		// Direct (no-proxy) announces, SSRF-guarded like tracker.defaultClient:
+		// refuse loopback/private/link-local destinations from .torrent URLs.
+		httpClient: &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &http.Transport{DialContext: tracker.GuardedDialContext},
+		},
 		maxRatio:     maxRatio,
 		autoRemove:   autoRemove,
 		torrentsDir:  abs,

@@ -93,12 +93,17 @@ func TestAnnounceClientTrustGuard(t *testing.T) {
 	m := New(c, t.TempDir(), 0, false, 1<<20, "http://default.example:8080")
 	t.Cleanup(m.Shutdown)
 
-	// Direct owner → shared no-proxy client (no transport).
+	// Direct owner → shared no-proxy client: no proxy, but SSRF-guarded dial
+	// (refuses loopback/private destinations from .torrent tracker URLs).
 	if err := m.SetUserProxy("d", ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := m.announceClient("d"); got.Transport != nil {
-		t.Error("direct owner should use the no-proxy client")
+	direct := m.announceClient("d").Transport.(*http.Transport)
+	if direct.Proxy != nil {
+		t.Error("direct owner must not use a proxy")
+	}
+	if direct.DialContext == nil {
+		t.Error("direct owner must be SSRF-guarded")
 	}
 
 	// Inherited default → trusted, dialed without the internal-address guard.
