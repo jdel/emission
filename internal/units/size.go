@@ -3,6 +3,7 @@ package units
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -57,8 +58,12 @@ func ParseRate(s string) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("parse rate %q: %w", orig, err)
 	}
-	if v < 0 {
-		return 0, fmt.Errorf("negative rate %q", orig)
+	if v < 0 || math.IsInf(v, 0) || math.IsNaN(v) {
+		return 0, fmt.Errorf("invalid rate %q", orig)
 	}
-	return uint64(v * float64(mult)), nil
+	n := v * float64(mult)
+	if n >= float64(math.MaxUint64) { // overflows uint64 (incl. multiply → +Inf)
+		return 0, fmt.Errorf("rate %q too large", orig)
+	}
+	return uint64(n), nil
 }
