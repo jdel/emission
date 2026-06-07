@@ -103,7 +103,7 @@ func (d *decoder) decodeBytes(start int) (Value, error) {
 		return Value{}, fmt.Errorf("bencode: bad bytes length")
 	}
 	d.pos = colon + 1
-	if d.pos+length > len(d.data) {
+	if length > len(d.data)-d.pos { // subtraction can't overflow: d.pos <= len(d.data)
 		return Value{}, errors.New("bencode: bytes truncated")
 	}
 	b := d.data[d.pos : d.pos+length]
