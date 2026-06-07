@@ -248,8 +248,14 @@ func (s *Service) putCeremony(data webauthn.SessionData, invite string) (string,
 	if err != nil {
 		return "", err
 	}
+	now := time.Now()
 	s.mu.Lock()
-	s.ceremonies[id] = ceremony{data: data, invite: invite, expiry: time.Now().Add(ceremonyTTL)}
+	for k, c := range s.ceremonies { // drop expired/abandoned ceremonies
+		if now.After(c.expiry) {
+			delete(s.ceremonies, k)
+		}
+	}
+	s.ceremonies[id] = ceremony{data: data, invite: invite, expiry: now.Add(ceremonyTTL)}
 	s.mu.Unlock()
 	return id, nil
 }

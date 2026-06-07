@@ -253,3 +253,15 @@ func TestServiceCredentialsDelegation(t *testing.T) {
 		t.Errorf("RemoveUser(bob) = (%d, %v)", n, err)
 	}
 }
+
+func TestPutCeremonyEvictsExpired(t *testing.T) {
+	svc := newService(t)
+	// An abandoned ceremony: Begin* ran, Finish* never called. Already expired.
+	svc.ceremonies["stale"] = ceremony{expiry: time.Now().Add(-time.Minute)}
+	if _, err := svc.putCeremony(webauthn.SessionData{}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(svc.ceremonies) != 1 {
+		t.Fatalf("expired ceremony not evicted: %d entries, want 1", len(svc.ceremonies))
+	}
+}
