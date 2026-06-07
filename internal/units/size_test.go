@@ -50,3 +50,13 @@ func TestFormatBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRateRejectsNonFinite(t *testing.T) {
+	// Non-finite, plus finite values that overflow uint64 (which saturate to
+	// MaxUint64 on conversion rather than erroring).
+	for _, in := range []string{"Inf", "+Inf", "NaN", "1e308G", "2e10G", "18446744073709551616"} {
+		if v, err := ParseRate(in); err == nil {
+			t.Errorf("ParseRate(%q) = %d, want error (out-of-range rejected)", in, v)
+		}
+	}
+}
