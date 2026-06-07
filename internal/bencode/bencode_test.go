@@ -146,3 +146,11 @@ func TestDecodeEmptyContainers(t *testing.T) {
 		t.Errorf("empty bytes: %+v err=%v", v, err)
 	}
 }
+
+func TestDecodeRejectsOverflowingByteLength(t *testing.T) {
+	// length = MaxInt64; d.pos+length overflows negative, skipping the
+	// truncation guard and panicking the slice on the unfixed code.
+	if _, err := Decode([]byte("9223372036854775807:abc")); err == nil {
+		t.Fatal("want error for overflowing byte-string length, got nil")
+	}
+}
