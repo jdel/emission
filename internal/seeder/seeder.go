@@ -514,6 +514,11 @@ func (m *Manager) AddFile(path string) (Status, error) {
 	if _, dup := m.sessions[id]; dup {
 		return Status{}, fmt.Errorf("torrent already loaded: %s", meta.Name)
 	}
+	// Same path overwritten with a different torrent: replace the old session.
+	if old, ok := m.byPath[abs]; ok {
+		delete(m.sessions, old.id)
+		old.cancel()
+	}
 	cl, err := m.clientFor(owner)
 	if err != nil {
 		return Status{}, fmt.Errorf("client identity: %w", err)
