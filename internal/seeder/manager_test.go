@@ -152,6 +152,33 @@ func TestManagerAddFileDuplicate(t *testing.T) {
 	}
 }
 
+func TestManagerAddFileReplacesOverwrittenPath(t *testing.T) {
+	srv := newTrackerServer(t)
+	dir := t.TempDir()
+	m := newTestManager(t, dir)
+	path := newTestTorrent(t, dir, "same", srv.URL)
+
+	st1, err := m.AddFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Overwrite the file with a different torrent (different name → hash).
+	path2 := newTestTorrent(t, dir, "same2", srv.URL)
+	if err := os.Rename(path2, path); err != nil {
+		t.Fatal(err)
+	}
+	st2, err := m.AddFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st1.ID == st2.ID {
+		t.Fatal("test setup broken: hashes equal")
+	}
+	if m.Exists(st1.ID) {
+		t.Errorf("old session for overwritten path still loaded; List len=%d", len(m.List()))
+	}
+}
+
 func TestManagerAddFileUsesStateFile(t *testing.T) {
 	srv := newTrackerServer(t)
 	dir := t.TempDir()
