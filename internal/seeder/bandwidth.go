@@ -1,10 +1,12 @@
 package seeder
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
+
+	"github.com/jdel/emission/internal/model"
+	"github.com/jdel/emission/internal/storage"
+	"github.com/jdel/emission/internal/storage/file"
 )
 
 // userSettingsFileName is the per-owner settings file, stored in the watched
@@ -58,41 +60,32 @@ func profileNameFor(k float64) string {
 	}
 }
 
-// userSettings is one owner's persisted seeding preferences.
-type userSettings struct {
-	Bandwidth      uint64  `json:"bandwidth,omitempty"`      // 0 = use the store default
-	HalfSaturation float64 `json:"halfSaturation,omitempty"` // 0 = normal; leechers for half speed
-	Profile        string  `json:"profile,omitempty"`        // legacy; migrated to HalfSaturation on load
-	Proxy          *string `json:"proxy,omitempty"`          // nil = use server default; set (incl "") = explicit ("" = direct)
-}
-
 // settingsStore holds per-owner seeding preferences (upload-bandwidth ceiling
 // and seeding profile), keyed by owner ("" = root / auth-disabled). Explicit
-// values persist to a JSON file; unset fields fall back to defaults.
+// values persist through the settings repository; unset fields fall back to
+// defaults.
 type settingsStore struct {
 	mu           sync.Mutex
-	path         string
+	repo         storage.SettingsRepo
 	defBandwidth uint64
-	perUser      map[string]userSettings
+	perUser      map[string]model.UserSettings
 }
 
-// loadSettingsStore reads persisted settings from path, falling back to an
-// empty store (defaults only) when the file is missing or malformed.
+// loadSettingsStore reads persisted settings from the file at path, falling
+// back to an empty store (defaults only) when none exist or they are
+// malformed.
 func loadSettingsStore(path string, defBandwidth uint64) *settingsStore {
-	s := &settingsStore{path: path, defBandwidth: defBandwidth, perUser: map[string]userSettings{}}
-	if data, err := os.ReadFile(path); err == nil {
-		var m map[string]userSettings
-		if json.Unmarshal(data, &m) == nil && m != nil {
-			// Migrate legacy profile names to a numeric half-saturation.
-			for owner, u := range m {
-				if u.HalfSaturation == 0 && u.Profile != "" {
-					u.HalfSaturation = halfSaturationForProfile(u.Profile)
-					u.Profile = ""
-					m[owner] = u
-				}
+	s := &settingsStore{repo: file.Settings{Path: path}, defBandwidth: defBandwidth, perUser: map[string]model.UserSettings{}}
+	if m, err := s.repo.Load(); err == nil && m != nil {
+		// Migrate legacy profile names to a numeric half-saturation.
+		for owner, u := range m {
+			if u.HalfSaturation == 0 && u.Profile != "" {
+				u.HalfSaturation = halfSaturationForProfile(u.Profile)
+				u.Profile = ""
+				m[owner] = u
 			}
-			s.perUser = m
 		}
+		s.perUser = m
 	}
 	return s
 }
@@ -137,7 +130,7 @@ func (s *settingsStore) setBandwidth(owner string, bytesPerSec uint64) error {
 	s.perUser[owner] = u
 	snapshot := s.snapshotLocked()
 	s.mu.Unlock()
-	return s.save(snapshot)
+	return s.repo.Save(snapshot)
 }
 
 // setHalfSaturation records owner's seeding-curve half-saturation (leechers for
@@ -153,7 +146,7 @@ func (s *settingsStore) setHalfSaturation(owner string, k float64) error {
 	s.perUser[owner] = u
 	snapshot := s.snapshotLocked()
 	s.mu.Unlock()
-	return s.save(snapshot)
+	return s.repo.Save(snapshot)
 }
 
 // proxy returns owner's explicit proxy URL and whether one is set. When unset,
@@ -176,22 +169,13 @@ func (s *settingsStore) setProxy(owner, proxyURL string) error {
 	s.perUser[owner] = u
 	snapshot := s.snapshotLocked()
 	s.mu.Unlock()
-	return s.save(snapshot)
+	return s.repo.Save(snapshot)
 }
 
-func (s *settingsStore) snapshotLocked() map[string]userSettings {
-	out := make(map[string]userSettings, len(s.perUser))
+func (s *settingsStore) snapshotLocked() map[string]model.UserSettings {
+	out := make(map[string]model.UserSettings, len(s.perUser))
 	for k, v := range s.perUser {
 		out[k] = v
 	}
 	return out
-}
-
-// save atomically writes snapshot to disk via a temp file + rename.
-func (s *settingsStore) save(snapshot map[string]userSettings) error {
-	data, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return err
-	}
-	return atomicWrite(s.path, data, 0o644)
 }

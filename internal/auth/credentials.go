@@ -6,60 +6,42 @@ package auth
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/jdel/emission/internal/model"
+	"github.com/jdel/emission/internal/storage"
+	"github.com/jdel/emission/internal/storage/file"
 )
 
-// StoredCredential is one registered passkey plus bookkeeping. Username is a
-// cosmetic label chosen at registration — every credential still belongs to
-// the single WebAuthn user; there is no per-username access control.
-type StoredCredential struct {
-	Username   string              `json:"username"`
-	InvitedBy  string              `json:"invitedBy,omitempty"` // empty for the bootstrap admin
-	AddedAt    int64               `json:"addedAt"`             // unix milliseconds
-	Credential webauthn.Credential `json:"credential"`
-}
+// StoredCredential is one registered passkey plus bookkeeping. See
+// model.StoredCredential for the field semantics.
+type StoredCredential = model.StoredCredential
 
-// CredentialStore holds the registered passkeys and persists them to a JSON
-// file. It also implements webauthn.User: the application has exactly one
-// user, and this store represents it.
+// CredentialStore holds the registered passkeys and persists them through the
+// credential repository. It also implements webauthn.User: the application
+// has exactly one user, and this store represents it.
 type CredentialStore struct {
-	path string
+	repo storage.CredentialRepo
 
 	mu     sync.Mutex
 	userID []byte
 	creds  []StoredCredential
 }
 
-// credentialFile is the on-disk JSON shape.
-type credentialFile struct {
-	UserID      []byte             `json:"userId"`
-	Credentials []StoredCredential `json:"credentials"`
-}
-
 // LoadCredentials reads the passkey file at path. A missing file yields an
 // empty store with a fresh random user handle (the bootstrap case).
 func LoadCredentials(path string) (*CredentialStore, error) {
-	s := &CredentialStore{path: path}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		s.userID, err = randomBytes(32)
-		return s, err
-	}
+	s := &CredentialStore{repo: file.Credentials{Path: path}}
+	cs, ok, err := s.repo.Load()
 	if err != nil {
 		return nil, err
 	}
-	var f credentialFile
-	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("parse passkey file %s: %w", path, err)
+	if ok {
+		s.userID, s.creds = cs.UserID, cs.Credentials
 	}
-	s.userID, s.creds = f.UserID, f.Credentials
 	if len(s.userID) == 0 {
 		if s.userID, err = randomBytes(32); err != nil {
 			return nil, err
@@ -110,18 +92,9 @@ func (s *CredentialStore) Update(cred webauthn.Credential) error {
 	return nil
 }
 
-// save writes the store to disk atomically. The caller must hold s.mu.
+// save persists the store. The caller must hold s.mu.
 func (s *CredentialStore) save() error {
-	data, err := json.MarshalIndent(
-		credentialFile{UserID: s.userID, Credentials: s.creds}, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return s.repo.Save(model.CredentialSet{UserID: s.userID, Credentials: s.creds})
 }
 
 // --- webauthn.User ---------------------------------------------------------

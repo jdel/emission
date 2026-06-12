@@ -24,6 +24,9 @@ import (
 	"time"
 
 	"github.com/jdel/emission/internal/client"
+	"github.com/jdel/emission/internal/model"
+	"github.com/jdel/emission/internal/storage"
+	"github.com/jdel/emission/internal/storage/file"
 	"github.com/jdel/emission/internal/torrent"
 	"github.com/jdel/emission/internal/tracker"
 	"github.com/rs/zerolog/log"
@@ -33,12 +36,8 @@ import (
 var ErrNotFound = errors.New("torrent not found")
 
 // StatsPoint is one historical sample for a seeded torrent, recorded every
-// rateRefresh interval and persisted to a <name>.torrent.stats sidecar file.
-type StatsPoint struct {
-	TimeMs   int64  `json:"t"` // unix milliseconds
-	Rate     uint64 `json:"r"` // simulated upload rate, bytes/sec
-	Leechers int64  `json:"l"` // total leechers across all trackers
-}
+// rateRefresh interval and persisted through the stats repository.
+type StatsPoint = model.StatsPoint
 
 // Status is a point-in-time snapshot of one seeded torrent. JSON tags match
 // the shape the web UI expects, so it can be served directly.
@@ -84,6 +83,9 @@ type Manager struct {
 	maxRatio    float64 // upload cap as a multiple of torrent size; 0 = unlimited
 	autoRemove  bool    // global default: remove torrent on cap (overridden per-torrent by state file)
 	torrentsDir string  // absolute path of the watched root
+
+	state storage.TorrentStateRepo // per-torrent overrides
+	stats storage.StatsRepo        // per-torrent rate history
 
 	baseCtx context.Context
 	cancel  context.CancelFunc
@@ -144,6 +146,8 @@ func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove b
 		maxRatio:     maxRatio,
 		autoRemove:   autoRemove,
 		torrentsDir:  abs,
+		state:        file.States{},
+		stats:        file.Stats{},
 		baseCtx:      ctx,
 		cancel:       cancel,
 		proxyDefault: proxyURL,
@@ -486,18 +490,18 @@ func (m *Manager) AddFile(path string) (Status, error) {
 	deleteOnCap := m.autoRemove
 	var addedAt time.Time
 	var uploadedBytes uint64
-	if sMax, sRatio, sAddedAt, sUploaded, sDeleteOnCap, ok := LoadStateFile(abs); ok {
-		maxSpeed, maxRatio = sMax, sRatio
-		uploadedBytes = sUploaded
-		deleteOnCap = sDeleteOnCap
-		if sAddedAt > 0 {
-			addedAt = time.UnixMilli(sAddedAt)
+	if st, ok := m.state.Load(abs); ok {
+		maxSpeed, maxRatio = st.MaxSpeed, st.MaxRatio
+		uploadedBytes = st.UploadedBytes
+		deleteOnCap = st.DeleteOnCap
+		if st.AddedAt > 0 {
+			addedAt = time.UnixMilli(st.AddedAt)
 		}
 	}
 	if addedAt.IsZero() {
 		addedAt = time.Now()
 		// Persist so restarts restore the original add time and autoremove default.
-		_ = SaveStateFile(abs, maxSpeed, maxRatio, addedAt.UnixMilli(), 0, deleteOnCap)
+		_ = m.state.Save(abs, model.TorrentState{MaxSpeed: maxSpeed, MaxRatio: maxRatio, AddedAt: addedAt.UnixMilli(), DeleteOnCap: deleteOnCap})
 	}
 	data, err := os.ReadFile(abs)
 	if err != nil {
@@ -530,7 +534,7 @@ func (m *Manager) AddFile(path string) (Status, error) {
 	if deleteOnCap {
 		s.deleteOnCap.Store(true)
 	}
-	if pts, err := loadStatsFile(abs + ".stats"); err == nil {
+	if pts, err := m.stats.Load(abs); err == nil {
 		s.diskLines = len(pts)
 		if len(pts) > statsMaxPoints { // keep only the most recent in memory
 			pts = pts[len(pts)-statsMaxPoints:]
@@ -575,8 +579,8 @@ func (m *Manager) Remove(id string) error {
 	}
 	s.cancel()
 	m.notifyChanged()
-	removeStateFile(s.path)
-	removeStatsFile(s.path)
+	m.state.Delete(s.path)
+	m.stats.Delete(s.path)
 	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
 		log.Error().Err(err).Str("path", s.path).Msg("could not delete torrent file")
 		return fmt.Errorf("torrent stopped but file not deleted: %w", err)
@@ -615,7 +619,7 @@ func (m *Manager) SetClientOptions(id string, maxSpeed uint64, maxRatio float64,
 	addedAtMs := s.addedAt.UnixMilli()
 	uploadedMs := s.uploaded.Load()
 	m.mu.Unlock()
-	if err := SaveStateFile(path, maxSpeed, maxRatio, addedAtMs, uploadedMs, deleteOnCap); err != nil {
+	if err := m.state.Save(path, model.TorrentState{MaxSpeed: maxSpeed, MaxRatio: maxRatio, AddedAt: addedAtMs, UploadedBytes: uploadedMs, DeleteOnCap: deleteOnCap}); err != nil {
 		return fmt.Errorf("save state file: %w", err)
 	}
 	return nil

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jdel/emission/internal/client"
+	"github.com/jdel/emission/internal/model"
 	"github.com/jdel/emission/internal/torrent"
 	"github.com/jdel/emission/internal/tracker"
 	"github.com/jdel/emission/internal/units"
@@ -221,7 +222,7 @@ func (s *session) flushStats() {
 		s.statsFlushed = len(s.statsBuf)
 		s.diskLines = len(snapshot)
 		s.statsMu.Unlock()
-		_ = writeStatsFile(s.path+".stats", snapshot)
+		_ = s.mgr.stats.Rewrite(s.path, snapshot)
 		return
 	}
 	toWrite := make([]StatsPoint, newCount)
@@ -229,7 +230,7 @@ func (s *session) flushStats() {
 	s.statsFlushed = len(s.statsBuf)
 	s.diskLines += newCount
 	s.statsMu.Unlock()
-	_ = appendStatsFile(s.path+".stats", toWrite)
+	_ = s.mgr.stats.Append(s.path, toWrite)
 }
 
 // accumulateLoop advances the shared upload counter once per second by the
@@ -339,13 +340,13 @@ func (s *session) runTracker(ts *trackerState) {
 // saveStateFile persists the current session state to disk.
 // Called after each tracker announce so uploaded bytes survive restarts.
 func (s *session) saveStateFile() {
-	_ = SaveStateFile(s.path,
-		s.maxSpeed.Load(),
-		s.maxRatio,
-		s.addedAt.UnixMilli(),
-		s.uploaded.Load(),
-		s.deleteOnCap.Load(),
-	)
+	_ = s.mgr.state.Save(s.path, model.TorrentState{
+		MaxSpeed:      s.maxSpeed.Load(),
+		MaxRatio:      s.maxRatio,
+		AddedAt:       s.addedAt.UnixMilli(),
+		UploadedBytes: s.uploaded.Load(),
+		DeleteOnCap:   s.deleteOnCap.Load(),
+	})
 }
 
 // status builds a snapshot of this session for the API and CLI.
