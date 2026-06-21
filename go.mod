@@ -3,7 +3,7 @@ module github.com/jdel/emission
 go 1.26.4
 
 require (
-	github.com/coder/websocket v1.8.14
+	github.com/coder/websocket v1.8.15
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/muesli/go-app-paths v0.2.2
