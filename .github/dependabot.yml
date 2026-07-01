@@ -22,6 +22,17 @@ updates:
         patterns:
           - "*"
 
+  # Rust dependencies for the Tauri desktop app
+  - package-ecosystem: cargo
+    directory: /tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      tauri-deps:
+        patterns:
+          - "*"
+
   # GitHub Actions in .github/workflows
   - package-ecosystem: github-actions
     directory: /
