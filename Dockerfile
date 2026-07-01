@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # --- Stage 1: build the web UI -----------------------------------------------
-FROM --platform=$BUILDPLATFORM node:20-alpine AS ui
+FROM --platform=$BUILDPLATFORM node:24-alpine AS ui
 WORKDIR /src/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci
