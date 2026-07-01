@@ -1,6 +1,6 @@
 # GoReleaser runtime image — the binary is injected by GoReleaser into the
 # build context; the UI is already embedded in it via go:embed.
-FROM alpine:3.21 AS certs
+FROM alpine:3.24 AS certs
 RUN apk add --no-cache ca-certificates
 
 FROM scratch
