@@ -4,6 +4,19 @@ All notable changes to emission are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.3.3] - 2026-07-01
+
+### Changed
+- Internal: the storage layer is now extracted behind repository interfaces, decoupling application logic from the on-disk file format.
+
+### Fixed
+- Restored the SSRF guard on direct tracker announces, closing a regression that let a torrent's tracker reach loopback/internal addresses.
+- Tracker announce replies are capped at 1 MiB, preventing a malicious or compromised tracker from exhausting memory with an oversized (or gzip-bomb) response.
+- Expired sessions, invites, and WebAuthn ceremonies are swept on each new entry, bounding memory on a long-running server.
+- Rejected non-finite and overflowing rate values instead of silently wrapping.
+- Rejected an overflowing bencode byte-string length instead of risking a panic on the untrusted length field.
+- Re-adding a torrent whose file path was overwritten now replaces the old session instead of leaving a stale one running.
+
 ## [0.3.2] - 2026-06-05
 
 ### Added
