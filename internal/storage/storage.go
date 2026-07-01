@@ -11,6 +11,7 @@ type TorrentStateRepo interface {
 	// Load returns the stored state. ok is false when none exists or the
 	// stored value is invalid.
 	Load(torrentPath string) (st model.TorrentState, ok bool)
+	// Save persists the state, overwriting any previous value.
 	Save(torrentPath string, st model.TorrentState) error
 	// Delete removes the stored state; missing state is a no-op.
 	Delete(torrentPath string)
@@ -19,6 +20,7 @@ type TorrentStateRepo interface {
 // StatsRepo persists a torrent's rate-history samples, keyed by the absolute
 // path of the backing .torrent file.
 type StatsRepo interface {
+	// Load returns the stored history in append order.
 	Load(torrentPath string) ([]model.StatsPoint, error)
 	// Append adds points to the existing history (cheap, O(new)).
 	Append(torrentPath string, pts []model.StatsPoint) error
@@ -30,7 +32,9 @@ type StatsRepo interface {
 
 // SettingsRepo persists the per-owner settings map.
 type SettingsRepo interface {
+	// Load returns the persisted settings map.
 	Load() (map[string]model.UserSettings, error)
+	// Save persists the settings map, overwriting any previous value.
 	Save(map[string]model.UserSettings) error
 }
 
@@ -39,5 +43,6 @@ type CredentialRepo interface {
 	// Load returns the stored set. ok is false when no set has been saved yet
 	// (fresh install); err reports an unreadable or malformed store.
 	Load() (cs model.CredentialSet, ok bool, err error)
+	// Save persists the credential set, overwriting any previous value.
 	Save(cs model.CredentialSet) error
 }

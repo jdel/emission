@@ -15,6 +15,8 @@ type Credentials struct {
 	Path string
 }
 
+// Load reads and parses the credential file. ok is false when it doesn't
+// exist yet (fresh install).
 func (c Credentials) Load() (model.CredentialSet, bool, error) {
 	data, err := os.ReadFile(c.Path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -30,6 +32,7 @@ func (c Credentials) Load() (model.CredentialSet, bool, error) {
 	return cs, true, nil
 }
 
+// Save writes the credential set atomically.
 func (c Credentials) Save(cs model.CredentialSet) error {
 	data, err := json.MarshalIndent(cs, "", "  ")
 	if err != nil {
