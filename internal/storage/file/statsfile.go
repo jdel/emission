@@ -17,6 +17,8 @@ type Stats struct{}
 
 func statsPath(torrentPath string) string { return torrentPath + ".stats" }
 
+// Load reads the stored history in append order, skipping any malformed
+// trailing line left by a crash mid-write.
 func (Stats) Load(torrentPath string) ([]model.StatsPoint, error) {
 	f, err := os.Open(statsPath(torrentPath))
 	if err != nil {

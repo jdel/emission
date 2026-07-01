@@ -12,6 +12,7 @@ type Settings struct {
 	Path string
 }
 
+// Load reads and parses the settings file.
 func (s Settings) Load() (map[string]model.UserSettings, error) {
 	data, err := os.ReadFile(s.Path)
 	if err != nil {
@@ -24,6 +25,7 @@ func (s Settings) Load() (map[string]model.UserSettings, error) {
 	return m, nil
 }
 
+// Save writes the settings map atomically.
 func (s Settings) Save(m map[string]model.UserSettings) error {
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
