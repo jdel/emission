@@ -165,6 +165,7 @@ export interface AuthControlsHandle {
   openInvite: () => void
   openManage: () => void
   addDevice: () => void
+  openBandwidth: () => void
 }
 
 interface AuthControlsProps {
@@ -190,6 +191,7 @@ export const AuthControls = forwardRef<AuthControlsHandle, AuthControlsProps>(
       openInvite: () => { setAskName(''); setPhase('ask') },
       openManage: () => setManageOpen(true),
       addDevice: () => { if (username) void mintInvite(username, true) },
+      openBandwidth: () => setMyBandwidthOpen(true),
     }))
 
     async function mintInvite(forUser: string, self = false) {

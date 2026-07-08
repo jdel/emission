@@ -155,12 +155,13 @@ export function DashboardHeader({
                   {resolvedTheme === 'dark' ? 'Light mode' : 'Dark mode'}
                 </DropdownMenu.Item>
 
-                {/* Bandwidth (auth off only; with auth it lives in AuthControls) */}
-                {!authEnabled && (
-                  <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setBwOpen(true)}>
-                    <Gauge className="size-4" /> My bandwidth
-                  </DropdownMenu.Item>
-                )}
+                {/* Bandwidth */}
+                <DropdownMenu.Item
+                  className={MENU_ITEM}
+                  onSelect={() => (authEnabled ? authRef.current?.openBandwidth() : setBwOpen(true))}
+                >
+                  <Gauge className="size-4" /> My bandwidth
+                </DropdownMenu.Item>
 
                 {/* Auth actions */}
                 {authEnabled && (
