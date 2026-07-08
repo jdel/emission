@@ -17,6 +17,7 @@ import (
 // Kind tags the type of a [Value].
 type Kind int
 
+// The four bencode value kinds.
 const (
 	KindInt Kind = iota
 	KindBytes

@@ -22,6 +22,7 @@ import (
 // Event is the BitTorrent announce event field.
 type Event string
 
+// The announce event values recognized by the tracker protocol.
 const (
 	EventNone      Event = ""
 	EventStarted   Event = "started"

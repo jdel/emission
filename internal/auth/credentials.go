@@ -99,10 +99,20 @@ func (s *CredentialStore) save() error {
 
 // --- webauthn.User ---------------------------------------------------------
 
-func (s *CredentialStore) WebAuthnID() []byte          { return s.userID }
-func (s *CredentialStore) WebAuthnName() string        { return "emission" }
+// WebAuthnID returns the user handle used to identify this account to the
+// authenticator, per the webauthn.User interface.
+func (s *CredentialStore) WebAuthnID() []byte { return s.userID }
+
+// WebAuthnName returns the account name shown to the authenticator, per the
+// webauthn.User interface.
+func (s *CredentialStore) WebAuthnName() string { return "emission" }
+
+// WebAuthnDisplayName returns the human-friendly account name shown to the
+// authenticator, per the webauthn.User interface.
 func (s *CredentialStore) WebAuthnDisplayName() string { return "emission" }
 
+// WebAuthnCredentials returns the user's registered WebAuthn credentials,
+// per the webauthn.User interface.
 func (s *CredentialStore) WebAuthnCredentials() []webauthn.Credential {
 	s.mu.Lock()
 	defer s.mu.Unlock()
