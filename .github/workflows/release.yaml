@@ -196,3 +196,17 @@ jobs:
           git add Casks/emission-desktop.rb
           git diff --cached --quiet || git commit -m "emission-desktop ${version}"
           git push
+
+  # Un-drafts the release once every platform's assets (Go binaries from
+  # goreleaser, desktop installers from the tauri matrix) are uploaded, so it
+  # never appears with parts missing.
+  publish:
+    needs: tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
