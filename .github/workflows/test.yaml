@@ -62,5 +62,8 @@ jobs:
       - name: Lint
         run: cd ui && npm run lint
 
+      - name: Test
+        run: cd ui && npm test
+
       - name: Build
         run: cd ui && npm run build
