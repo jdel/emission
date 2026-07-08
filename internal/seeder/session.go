@@ -55,11 +55,8 @@ type session struct {
 	cancel   context.CancelFunc
 	trackers []*trackerState
 
-	// --- Guarded by Manager.mu ---
-	// Read in status() (called under m.mu); written in SetClientOptions.
-	maxRatio float64
-
 	// --- Atomic: read by goroutines, written by SetClientOptions ---
+	maxRatio    atomic.Uint64 // math.Float64bits(ratio); 0 = unlimited
 	maxSpeed    atomic.Uint64
 	uploaded    atomic.Uint64 // bytes uploaded this session
 	targetRate  atomic.Uint64 // simulated target rate, bytes/sec; the jitter center
@@ -91,17 +88,17 @@ type trackerState struct {
 func newSession(parent context.Context, id string, meta *torrent.Meta, path string, maxSpeed uint64, maxRatio float64, addedAt time.Time, owner string, cl *client.Client, m *Manager) *session {
 	ctx, cancel := context.WithCancel(parent)
 	s := &session{
-		id:       id,
-		meta:     meta,
-		path:     path,
-		addedAt:  addedAt,
-		owner:    owner,
-		client:   cl,
-		mgr:      m,
-		ctx:      ctx,
-		cancel:   cancel,
-		maxRatio: maxRatio,
+		id:      id,
+		meta:    meta,
+		path:    path,
+		addedAt: addedAt,
+		owner:   owner,
+		client:  cl,
+		mgr:     m,
+		ctx:     ctx,
+		cancel:  cancel,
 	}
+	s.maxRatio.Store(math.Float64bits(maxRatio))
 	s.maxSpeed.Store(maxSpeed)
 	s.uploadCap.Store(uploadCapFor(meta.Length, maxRatio))
 	for _, u := range meta.AnnounceURLs {
@@ -342,7 +339,7 @@ func (s *session) runTracker(ts *trackerState) {
 func (s *session) saveStateFile() {
 	_ = s.mgr.state.Save(s.path, model.TorrentState{
 		MaxSpeed:      s.maxSpeed.Load(),
-		MaxRatio:      s.maxRatio,
+		MaxRatio:      math.Float64frombits(s.maxRatio.Load()),
 		AddedAt:       s.addedAt.UnixMilli(),
 		UploadedBytes: s.uploaded.Load(),
 		DeleteOnCap:   s.deleteOnCap.Load(),
@@ -383,7 +380,7 @@ func (s *session) status() Status {
 		UploadedBytes:      uploaded,
 		RateBytesPerSec:    rate,
 		MaxRateBytesPerSec: s.maxSpeed.Load(),
-		MaxRatio:           s.maxRatio,
+		MaxRatio:           math.Float64frombits(s.maxRatio.Load()),
 		Capped:             capped,
 		DeleteOnCap:        s.deleteOnCap.Load(),
 		AddedAt:            s.addedAt.UnixMilli(),

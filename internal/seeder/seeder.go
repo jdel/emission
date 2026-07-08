@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -136,7 +137,7 @@ func New(tmpl *client.Client, torrentsDir string, maxRatio float64, autoRemove b
 		abs = torrentsDir
 	}
 	return &Manager{
-		client:       tmpl,
+		client: tmpl,
 		// Direct (no-proxy) announces, SSRF-guarded like tracker.defaultClient:
 		// refuse loopback/private/link-local destinations from .torrent URLs.
 		httpClient: &http.Client{
@@ -604,7 +605,7 @@ func (m *Manager) SetClientOptions(id string, maxSpeed uint64, maxRatio float64,
 		return fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
 	s.maxSpeed.Store(maxSpeed)
-	s.maxRatio = maxRatio
+	s.maxRatio.Store(math.Float64bits(maxRatio))
 	s.uploadCap.Store(uploadCapFor(s.meta.Length, maxRatio))
 	var leechers int64
 	for _, ts := range s.trackers {
