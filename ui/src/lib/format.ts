@@ -71,17 +71,16 @@ export function formatDateTime(ms: number): string {
 /**
  * formatUptime renders how long since a past unix-ms timestamp in a compact
  * form: the most-significant non-zero unit plus the next two down to seconds
- * (max 3 units), e.g. "2m30s", "2d3h52m", "1y3m5d". Year/month are approximate
- * (365d / 30d); trailing zero units are dropped, interior zeros kept. Units
- * never overlap in one output, so "m" is months only beside y/d and minutes
- * only beside h/s.
+ * (max 3 units), e.g. "2m30s", "2d3h52m", "1Y3M5d". Year/month are approximate
+ * (365d / 30d); trailing zero units are dropped, interior zeros kept. Year and
+ * month use capital Y/M to stay unambiguous next to lowercase minutes.
  */
 export function formatUptime(atMs: number, nowMs = Date.now()): string {
   let sec = Math.floor((nowMs - atMs) / 1000)
   if (sec <= 0) return '0s'
   const units: [number, string][] = [
-    [31536000, 'y'], // 365 days
-    [2592000, 'm'], // 30 days (month)
+    [31536000, 'Y'], // 365 days
+    [2592000, 'M'], // 30 days (month)
     [86400, 'd'],
     [3600, 'h'],
     [60, 'm'], // minute
