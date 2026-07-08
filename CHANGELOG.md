@@ -4,6 +4,13 @@ All notable changes to emission are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.4.0] - 2026-07-08
+
+### Fixed
+- The mobile menu's "My bandwidth" control is now shown to every signed-in user, not just when auth is off — it had been accidentally hidden whenever authentication was enabled.
+- Uptime display no longer confuses months/years with minutes (e.g. `1M` for one month vs `1m` for one minute).
+- Fixed a data race where a torrent's ratio cap could be read from a background goroutine while being written concurrently by an API request.
+
 ## [0.3.3] - 2026-07-01
 
 ### Changed
